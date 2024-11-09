@@ -145,7 +145,6 @@ public class WebController extends AbstractVerticle {
                     default: invalidJSONReply(context,requestBody);
                 }
                 checkResponseAndSendReply(context, b);
-                /*notifyEBikeChanged(newCount);*/
             } else {
                 invalidJSONReply(context,requestBody);
             }

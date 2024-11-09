@@ -25,9 +25,7 @@ public class WebClientImpl implements WebClient {
 
     private static final Logger LOGGER = Logger.getLogger(WebClientImpl.class.getName());
     private static final String SERVER_HOST = "localhost";
-    private static final int RIDE_SERVER_PORT = 8080;
-    private static final int USER_SERVER_PORT = 8081;
-    private static final int BIKE_SERVER_PORT = 8082;
+    private static final int API_GATEWAY_SERVER_PORT = 8085;
     private static final String USER_COMMAND_PATH = "/api/user/command";
     private static final String USER_QUERY_PATH = "/api/user/query";
     private static final String EBIKE_COMMAND_PATH = "/api/ebike/command";
@@ -37,9 +35,7 @@ public class WebClientImpl implements WebClient {
     private static final String BIKE_CHANGE_EVENT_TOPIC = "ebike-Change";
     private static final String USER_CHANGE_EVENT_TOPIC = "users-Change";
 
-    private io.vertx.ext.web.client.WebClient rideClient;
-    private io.vertx.ext.web.client.WebClient userClient;
-    private io.vertx.ext.web.client.WebClient bikeClient;
+    private io.vertx.ext.web.client.WebClient apiClient;
     private Vertx vertx;
 
     public WebClientImpl() {
@@ -53,12 +49,8 @@ public class WebClientImpl implements WebClient {
         Vertx.clusteredVertx(optionss, cluster -> {
             if (cluster.succeeded()) {
                 vertx = cluster.result();
-                WebClientOptions options = new WebClientOptions().setDefaultHost(SERVER_HOST).setDefaultPort(USER_SERVER_PORT);
-                userClient = io.vertx.ext.web.client.WebClient.create(vertx, options);
-                options = new WebClientOptions().setDefaultHost(SERVER_HOST).setDefaultPort(BIKE_SERVER_PORT);
-                bikeClient = io.vertx.ext.web.client.WebClient.create(vertx, options);
-                options = new WebClientOptions().setDefaultHost(SERVER_HOST).setDefaultPort(RIDE_SERVER_PORT);
-                rideClient = io.vertx.ext.web.client.WebClient.create(vertx, options);
+                WebClientOptions options = new WebClientOptions().setDefaultHost(SERVER_HOST).setDefaultPort(API_GATEWAY_SERVER_PORT);
+                apiClient = io.vertx.ext.web.client.WebClient.create(vertx, options);
                 LOGGER.setLevel(Level.FINE);
             } else {
                 System.out.println("Cluster up failed: " + cluster.cause());
@@ -74,7 +66,7 @@ public class WebClientImpl implements WebClient {
         requestPayload.put(PASSWORD, password);
         requestPayload.put(OPERATION, WebOperation.CREATE.ordinal());
 
-        userClient.post(USER_COMMAND_PATH)
+        apiClient.post(USER_COMMAND_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded()) {
                         if (ar.result().bodyAsJsonObject().getValue(RESULT).toString().equals("ok")) {
@@ -100,7 +92,7 @@ public class WebClientImpl implements WebClient {
         requestPayload.put(USER_ID, userId);
         requestPayload.put(OPERATION, WebOperation.DELETE.ordinal());
 
-        userClient.post(USER_COMMAND_PATH)
+        apiClient.post(USER_COMMAND_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded()) {
                         if (ar.result().bodyAsJsonObject().getValue(RESULT).toString().equals("ok")) {
@@ -127,7 +119,7 @@ public class WebClientImpl implements WebClient {
         requestPayload.put(CREDIT, credit);
         requestPayload.put(OPERATION, WebOperation.UPDATE.ordinal());
 
-        userClient.post(USER_COMMAND_PATH)
+        apiClient.post(USER_COMMAND_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded()) {
                         if (ar.result().bodyAsJsonObject().getValue(RESULT).toString().equals("ok")) {
@@ -154,7 +146,7 @@ public class WebClientImpl implements WebClient {
         requestPayload.put(PASSWORD, password);
         requestPayload.put(OPERATION, WebOperation.LOGIN.ordinal());
 
-        userClient.get(USER_QUERY_PATH)
+        apiClient.get(USER_QUERY_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded()) {
                         if (ar.result().bodyAsJsonObject().getValue(RESULT).toString().equals("ok")) {
@@ -191,7 +183,7 @@ public class WebClientImpl implements WebClient {
         }
         requestPayload.put(OPERATION, WebOperation.READ.ordinal());
 
-        userClient.get(USER_QUERY_PATH)
+        apiClient.get(USER_QUERY_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded()) {
                         JsonObject res = ar.result().bodyAsJsonObject();
@@ -234,7 +226,7 @@ public class WebClientImpl implements WebClient {
         requestPayload.put(POSITION_Y, y);
         requestPayload.put(OPERATION, WebOperation.CREATE.ordinal());
 
-        bikeClient.post(EBIKE_COMMAND_PATH)
+        apiClient.post(EBIKE_COMMAND_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded()) {
                         if (ar.result().bodyAsJsonObject().getValue(RESULT).toString().equals("ok")) {
@@ -260,7 +252,7 @@ public class WebClientImpl implements WebClient {
         requestPayload.put(E_BIKE_ID, eBikeId);
         requestPayload.put(OPERATION, WebOperation.DELETE.ordinal());
 
-        bikeClient.post(EBIKE_COMMAND_PATH)
+        apiClient.post(EBIKE_COMMAND_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded()) {
                         if (ar.result().bodyAsJsonObject().getValue(RESULT).toString().equals("ok")) {
@@ -294,7 +286,7 @@ public class WebClientImpl implements WebClient {
         }
         requestPayload.put(OPERATION, WebOperation.UPDATE.ordinal());
 
-        bikeClient.post(EBIKE_COMMAND_PATH)
+        apiClient.post(EBIKE_COMMAND_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded()) {
                         if (ar.result().bodyAsJsonObject().getValue(RESULT).toString().equals("ok")) {
@@ -332,7 +324,7 @@ public class WebClientImpl implements WebClient {
 
         requestPayload.put(OPERATION, WebOperation.READ.ordinal());
 
-        bikeClient.get(EBIKE_QUERY_PATH)
+        apiClient.get(EBIKE_QUERY_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded()) {
                         if (LOGGER.isLoggable(Level.FINE)) {
@@ -374,7 +366,7 @@ public class WebClientImpl implements WebClient {
         requestPayload.put(E_BIKE_ID, eBikeId);
         requestPayload.put(OPERATION, WebOperation.CREATE.ordinal());
 
-        rideClient.post(RIDE_COMMAND_PATH)
+        apiClient.post(RIDE_COMMAND_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded() && ar.result().bodyAsJsonObject().getValue(RESULT).toString().equals("ok")) {
                         if (LOGGER.isLoggable(Level.FINE)) {
@@ -401,7 +393,7 @@ public class WebClientImpl implements WebClient {
         requestPayload.put(POSITION_Y, y);
         requestPayload.put(OPERATION, WebOperation.UPDATE.ordinal());
 
-        rideClient.post(RIDE_COMMAND_PATH)
+        apiClient.post(RIDE_COMMAND_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded()) {
                         var res = ar.result().bodyAsJsonObject();
@@ -432,7 +424,7 @@ public class WebClientImpl implements WebClient {
         requestPayload.put(E_BIKE_ID, eBikeId);
         requestPayload.put(OPERATION, WebOperation.DELETE.ordinal());
 
-        rideClient.post(RIDE_COMMAND_PATH)
+        apiClient.post(RIDE_COMMAND_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded() && ar.result().bodyAsJsonObject().getValue(RESULT).toString().equals("ok")) {
                         if (LOGGER.isLoggable(Level.FINE)) {
@@ -456,7 +448,7 @@ public class WebClientImpl implements WebClient {
         requestPayload.put("rideId", rideId);
         requestPayload.put(OPERATION, WebOperation.DELETE.ordinal());
 
-        rideClient.post(RIDE_COMMAND_PATH)
+        apiClient.post(RIDE_COMMAND_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded()) {
                         if (ar.result().bodyAsJsonObject().getValue(RESULT).toString().equals("ok")) {
@@ -492,7 +484,7 @@ public class WebClientImpl implements WebClient {
         requestPayload.put("multiple", true);
         requestPayload.put(OPERATION, WebOperation.READ.ordinal());
 
-        rideClient.get(RIDE_QUERY_PATH)
+        apiClient.get(RIDE_QUERY_PATH)
                 .sendJson(requestPayload, ar -> {
                     if (ar.succeeded()) {
                         if (LOGGER.isLoggable(Level.FINE)) {
