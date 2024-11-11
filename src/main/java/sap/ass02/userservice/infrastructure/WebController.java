@@ -1,6 +1,7 @@
 package sap.ass02.userservice.infrastructure;
 
 import com.hazelcast.config.Config;
+import com.hazelcast.config.MemberAttributeConfig;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
@@ -49,7 +50,12 @@ public class WebController extends AbstractVerticle {
         LOGGER.setLevel(Level.FINE);
         this.pManager = appManager;
         Config hazelcastConfig = new Config();
-
+        hazelcastConfig.setClusterName("EBikeCesena");
+        Map<String, String> attributes = new HashMap<>();
+        attributes.put("SERVICE_NAME","UserService");
+        attributes.put("SERVICE_ADDRESS","localhost");
+        attributes.put("SERVICE_PORT","8081");
+        hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
         ClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
         // Create VertxOptions with the Hazelcast Cluster Manager

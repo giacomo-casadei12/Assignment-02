@@ -14,17 +14,25 @@ import io.vertx.core.VertxOptions;
 import io.vertx.core.spi.cluster.ClusterManager;
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
 
+import java.util.Iterator;
+import java.util.Set;
+
 public class UserMain {
     public static void main(String[] args) {
 
         Config hazelcastConfig = new Config();
-        hazelcastConfig.setClusterName("my-cluster");
+        hazelcastConfig.setClusterName("EBikeCesena");
         hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttribute("MEMBER_NAME","UserService"));
         hazelcastConfig.addListenerConfig(new ListenerConfig(new MembershipListener(){
             @Override
             public void memberAdded(MembershipEvent membershipEvent) {
-                String groda = membershipEvent.getMembers().iterator().next().getAttribute("MEMBER_NAME");
-                System.out.println(groda);
+                Set<Member> members = membershipEvent.getMembers();
+                Iterator<Member> iterator = members.iterator();
+                while (iterator.hasNext()) {
+                    Member member = iterator.next();
+                    String groda = member.getAttribute("MEMBER_NAME");
+                    System.out.println(groda);
+                }
             }
 
             @Override

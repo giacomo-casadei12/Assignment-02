@@ -1,6 +1,11 @@
 package sap.ass02.apigateway;
 
+import com.hazelcast.cluster.Member;
+import com.hazelcast.cluster.MembershipEvent;
+import com.hazelcast.cluster.MembershipListener;
 import com.hazelcast.config.Config;
+import com.hazelcast.config.ListenerConfig;
+import com.hazelcast.config.MemberAttributeConfig;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
@@ -17,15 +22,11 @@ import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
 
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class ApiGateway extends AbstractVerticle {
-
-    private static final String SERVER_HOST = "localhost";
-    private static final int RIDE_SERVER_PORT = 8080;
-    private static final int USER_SERVER_PORT = 8081;
-    private static final int BIKE_SERVER_PORT = 8082;
 
     private static final String USER_COMMAND_PATH = "/api/user/command";
     private static final String USER_QUERY_PATH = "/api/user/query";
@@ -33,6 +34,13 @@ public class ApiGateway extends AbstractVerticle {
     private static final String EBIKE_QUERY_PATH = "/api/ebike/query";
     private static final String RIDE_COMMAND_PATH = "/api/ride/command";
     private static final String RIDE_QUERY_PATH = "/api/ride/query";
+
+    private String ride_server_host = "";
+    private String user_server_host = "";
+    private String bike_server_host = "";
+    private int ride_server_port = 0;
+    private int user_server_port = 0;
+    private int bike_server_port = 0;
 
     private final int port;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
@@ -43,7 +51,59 @@ public class ApiGateway extends AbstractVerticle {
         this.port = 8085;
         LOGGER.setLevel(Level.FINE);
         Config hazelcastConfig = new Config();
+        hazelcastConfig.setClusterName("EBikeCesena");
+        Map<String, String> attributes = new HashMap<>();
+        attributes.put("SERVICE_NAME","ApiGateway");
+        attributes.put("SERVICE_ADDRESS","localhost");
+        attributes.put("SERVICE_PORT","8085");
+        hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
+        hazelcastConfig.addListenerConfig(new ListenerConfig(new MembershipListener(){
+            @Override
+            public void memberAdded(MembershipEvent membershipEvent) {
+                Set<Member> members = membershipEvent.getMembers();
+                for (Member member : members) {
+                    String serviceName = member.getAttribute("SERVICE_NAME");
+                    switch (serviceName) {
+                        case "BikeService":
+                            if (bike_server_host.isBlank() && bike_server_port == 0) {
+                                bike_server_port = Integer.parseInt(member.getAttribute("SERVICE_PORT"));
+                                bike_server_host = member.getAttribute("SERVICE_ADDRESS");
+                                if (Objects.isNull(bikeClient) && !Objects.isNull(vertx)) {
+                                    WebClientOptions options = new WebClientOptions().setDefaultHost(bike_server_host).setDefaultPort(bike_server_port);
+                                    bikeClient = WebClient.create(vertx, options);
+                                }
+                            }
+                            break;
+                        case "UserService":
+                            System.out.println("pipo");
+                            if (user_server_host.isBlank() && user_server_port == 0) {
+                                user_server_port = Integer.parseInt(member.getAttribute("SERVICE_PORT"));
+                                user_server_host = member.getAttribute("SERVICE_ADDRESS");
+                                if (Objects.isNull(userClient) && !Objects.isNull(vertx)) {
+                                    WebClientOptions options = new WebClientOptions().setDefaultHost(user_server_host).setDefaultPort(user_server_port);
+                                    userClient = WebClient.create(vertx, options);
+                                }
+                            }
+                            break;
+                        case "RideService":
+                            if (ride_server_host.isBlank() && ride_server_port == 0) {
+                                ride_server_port = Integer.parseInt(member.getAttribute("SERVICE_PORT"));
+                                ride_server_host = member.getAttribute("SERVICE_ADDRESS");
+                                if (Objects.isNull(rideClient) && !Objects.isNull(vertx)) {
+                                    WebClientOptions options = new WebClientOptions().setDefaultHost(ride_server_host).setDefaultPort(ride_server_port);
+                                    rideClient = WebClient.create(vertx, options);
+                                }
+                            }
+                            break;
+                    }
+                }
+            }
 
+            @Override
+            public void memberRemoved(MembershipEvent membershipEvent) {
+                System.out.println("non Groda");
+            }
+        }));
         ClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
         // Create VertxOptions with the Hazelcast Cluster Manager
@@ -52,12 +112,19 @@ public class ApiGateway extends AbstractVerticle {
         Vertx.clusteredVertx(vOptions, cluster -> {
             if (cluster.succeeded()) {
                 vertx = cluster.result();
-                WebClientOptions options = new WebClientOptions().setDefaultHost(SERVER_HOST).setDefaultPort(USER_SERVER_PORT);
-                userClient = io.vertx.ext.web.client.WebClient.create(vertx, options);
-                options = new WebClientOptions().setDefaultHost(SERVER_HOST).setDefaultPort(BIKE_SERVER_PORT);
-                bikeClient = io.vertx.ext.web.client.WebClient.create(vertx, options);
-                options = new WebClientOptions().setDefaultHost(SERVER_HOST).setDefaultPort(RIDE_SERVER_PORT);
-                rideClient = io.vertx.ext.web.client.WebClient.create(vertx, options);
+                WebClientOptions options;
+                if (!user_server_host.isBlank() && user_server_port > 0 && Objects.isNull(userClient)) {
+                    options = new WebClientOptions().setDefaultHost(user_server_host).setDefaultPort(user_server_port);
+                    userClient = io.vertx.ext.web.client.WebClient.create(vertx, options);
+                }
+                if (!bike_server_host.isBlank() && bike_server_port > 0 && Objects.isNull(bikeClient)) {
+                    options = new WebClientOptions().setDefaultHost(bike_server_host).setDefaultPort(bike_server_port);
+                    bikeClient = io.vertx.ext.web.client.WebClient.create(vertx, options);
+                }
+                if (!ride_server_host.isBlank() && ride_server_port > 0 && Objects.isNull(rideClient)) {
+                    options = new WebClientOptions().setDefaultHost(ride_server_host).setDefaultPort(ride_server_port);
+                    rideClient = io.vertx.ext.web.client.WebClient.create(vertx, options);
+                }
                 LOGGER.setLevel(Level.FINE);
                 vertx.deployVerticle(this);
             } else {
