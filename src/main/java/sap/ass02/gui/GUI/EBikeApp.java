@@ -273,6 +273,17 @@ public class EBikeApp extends JFrame implements ActionListener {
     }
 
     /**
+     * Request an update for the role a user.
+     *
+     * @param userId the user id
+     * @param admin true for promoting to admin, false for demoting to user
+     * @return a Future of Boolean that will contain true if the update was successful
+     */
+    public Future<Boolean> requestUpdateUserRole(int userId, boolean admin){
+        return webClient.requestUpdateUserRole(userId, admin);
+    }
+
+    /**
      * Request the deletion of a user.
      *
      * @param userId the user id to be deleted

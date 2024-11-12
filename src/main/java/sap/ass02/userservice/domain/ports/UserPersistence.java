@@ -53,6 +53,8 @@ public interface UserPersistence {
      */
     boolean updateUser(int id, int credit);
 
+    boolean updateUserRole(int id, boolean admin);
+
     /**
      * Delete a user.
      *

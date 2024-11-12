@@ -49,6 +49,11 @@ public class AppManagerImpl implements AppManager, PersistenceNotificationServic
     }
 
     @Override
+    public boolean updateUserRole(int id, boolean admin) {
+        return this.userDA.updateUserRole(id, admin);
+    }
+
+    @Override
     public boolean deleteUser(int id) {
         return this.userDA.deleteUser(id);
     }

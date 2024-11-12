@@ -30,6 +30,10 @@ public class JsonFieldsConstants {
      */
     public static final String CREDIT = "credit";
     /**
+     * The constant for the ADMIN field.
+     */
+    public static final String ADMIN = "admin";
+    /**
      * The constant for the E_BIKE_ID field.
      */
     public static final String E_BIKE_ID = "eBikeId";

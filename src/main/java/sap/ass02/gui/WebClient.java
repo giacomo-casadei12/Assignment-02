@@ -42,6 +42,16 @@ public interface WebClient {
     Future<Boolean> requestUpdateUser(int userId, int credit);
 
     /**
+     * Request a user role update.
+     *
+     * @param userId the user id to be updated
+     * @param admin True for promoting the user to admin, False for demoting to user
+     * @return a Future of a Boolean that will contain
+     * true if the update was successful
+     */
+    Future<Boolean> requestUpdateUserRole(int userId, boolean admin);
+
+    /**
      * Request a login.
      *
      * @param username the username

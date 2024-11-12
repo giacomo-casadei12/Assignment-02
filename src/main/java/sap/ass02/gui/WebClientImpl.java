@@ -139,6 +139,33 @@ public class WebClientImpl implements WebClient {
     }
 
     @Override
+    public Future<Boolean> requestUpdateUserRole(int userId, boolean admin) {
+        Promise<Boolean> promise = Promise.promise();
+        JsonObject requestPayload = new JsonObject();
+        requestPayload.put(USER_ID, userId);
+        requestPayload.put(ADMIN, admin ? 1 : 0);
+        requestPayload.put(OPERATION, WebOperation.UPDATE.ordinal());
+
+        apiClient.post(USER_COMMAND_PATH)
+                .sendJson(requestPayload, ar -> {
+                    if (ar.succeeded()) {
+                        if (ar.result().bodyAsJsonObject().getValue(RESULT).toString().equals("ok")) {
+                            if (LOGGER.isLoggable(Level.FINE)) {
+                                LOGGER.info("User updated: " + ar.result().bodyAsString());
+                            }
+                            promise.complete(true);
+                        } else {
+                            if (LOGGER.isLoggable(Level.FINE)) {
+                                LOGGER.severe("Failed to update user: " + ar.cause().getMessage());
+                            }
+                            promise.complete(false);
+                        }
+                    }
+                });
+        return promise.future();
+    }
+
+    @Override
     public Future<Boolean> requestLogin(String username, String password) {
         Promise<Boolean> promise = Promise.promise();
         JsonObject requestPayload = new JsonObject();
@@ -193,7 +220,7 @@ public class WebClientImpl implements WebClient {
                             while (it.hasNext()) {
                                 var jsonObj = (JsonObject) it.next();
                                 int resId = Integer.parseInt(jsonObj.getString(USER_ID));
-                                var resUser = new Triple<>(jsonObj.getString(USERNAME), Integer.parseInt(jsonObj.getString(CREDIT)), Boolean.parseBoolean(jsonObj.getString("isAdmin")));
+                                var resUser = new Triple<>(jsonObj.getString(USERNAME), Integer.parseInt(jsonObj.getString(CREDIT)), Boolean.parseBoolean(jsonObj.getString("admin")));
                                 retMap.put(resId, resUser);
                             }
                             promise.complete(retMap);

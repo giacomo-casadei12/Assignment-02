@@ -78,11 +78,27 @@ public class AllUsersDialog extends JDialog {
             JPanel itemPanel = new JPanel(new BorderLayout());
             JLabel itemLabel = new JLabel(item);
             JButton deleteButton = getDeleteButton(listPanel, entry.getKey());
+            JButton promoteButton = getAdminPromoteDemoteButton(listPanel, entry.getKey(), entry.getValue().third());
 
             itemPanel.add(itemLabel, BorderLayout.CENTER);
             itemPanel.add(deleteButton, BorderLayout.EAST);
+            itemPanel.add(promoteButton, BorderLayout.WEST);
             listPanel.add(itemPanel);
         }
+    }
+
+    private JButton getAdminPromoteDemoteButton(JPanel listPanel, int key, boolean admin) {
+        JButton promoteButton = new JButton(admin ? "Demote to user" : "Promote to admin");
+
+        promoteButton.addActionListener(e -> this.app.requestUpdateUserRole(key, !admin).onComplete(x -> {
+            if (x.result()) {
+                showNonBlockingMessage("Successfully promoting user to admin", "Success", JOptionPane.INFORMATION_MESSAGE);
+                refreshList(listPanel);
+            } else {
+                showNonBlockingMessage("Something went wrong", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }));
+        return promoteButton;
     }
 
     private JButton getDeleteButton(JPanel listPanel, int key) {

@@ -129,6 +129,21 @@ public class UserDB implements UserDA {
     }
 
     @Override
+    public boolean updateUserRole(int id, boolean admin) {
+        int rs;
+        try (Connection connection = ds.getConnection()) {
+            PreparedStatement stmt = connection.prepareStatement("UPDATE users SET IsAdmin = ? WHERE ID = ?");
+            stmt.setInt(2, id);
+            stmt.setInt(1, admin ? 1 : 0);
+            rs = stmt.executeUpdate();
+            stmt.close();
+        } catch( SQLException e) {
+            throw new IllegalStateException(PROBLEM_IN_THE_QUERY, e);
+        }
+        return rs > 0;
+    }
+
+    @Override
     public boolean deleteUser(int id) {
         int rs;
         try (Connection connection = ds.getConnection()) {

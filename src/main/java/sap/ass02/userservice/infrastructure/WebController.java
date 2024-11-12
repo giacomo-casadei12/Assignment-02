@@ -121,6 +121,10 @@ public class WebController extends AbstractVerticle {
                             int id = requestBody.getInteger(USER_ID);
                             int credit = requestBody.getInteger(CREDIT);
                             b = pManager.updateUser(id,credit);
+                        } else if (requestBody.containsKey(USER_ID) && requestBody.containsKey(ADMIN)) {
+                            int id = requestBody.getInteger(USER_ID);
+                            boolean admin = requestBody.getInteger(ADMIN) > 0;
+                            b = pManager.updateUserRole(id, admin);
                         } else {
                             invalidJSONReply(context,requestBody);
                         }

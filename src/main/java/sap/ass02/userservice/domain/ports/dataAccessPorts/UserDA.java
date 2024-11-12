@@ -58,6 +58,8 @@ public interface UserDA {
      */
     boolean updateUser(int id, int credit);
 
+    boolean updateUserRole(int id, boolean admin);
+
     /**
      * Delete a single user.
      *
