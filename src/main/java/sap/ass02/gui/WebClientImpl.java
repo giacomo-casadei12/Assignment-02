@@ -1,6 +1,7 @@
 package sap.ass02.gui;
 
 import com.hazelcast.config.Config;
+import com.hazelcast.config.MemberAttributeConfig;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
@@ -14,6 +15,7 @@ import sap.ass02.gui.utils.Pair;
 import sap.ass02.gui.utils.Triple;
 import sap.ass02.gui.utils.WebOperation;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
@@ -40,10 +42,12 @@ public class WebClientImpl implements WebClient {
 
     public WebClientImpl() {
         Config hazelcastConfig = new Config();
-
+        hazelcastConfig.setClusterName("EBikeCesena");
         ClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
+        Map<String, String> attributes = new HashMap<>();
+        attributes.put("SERVICE_NAME","Client");
+        hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
 
-        // Create VertxOptions with the Hazelcast Cluster Manager
         VertxOptions optionss = new VertxOptions().setClusterManager(clusterManager);
 
         Vertx.clusteredVertx(optionss, cluster -> {
