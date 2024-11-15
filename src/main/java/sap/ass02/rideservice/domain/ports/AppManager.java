@@ -7,7 +7,7 @@ import sap.ass02.rideservice.utils.Pair;
  * The access point to all methods regarding the
  * persistence of Users, EBikes and Rides.
  */
-public interface AppManager extends UserPersistence, EBikePersistence, RidePersistence {
+public interface AppManager extends RidePersistence {
 
     /**
      * Start a ride given a userId and a bikeID.
@@ -38,5 +38,7 @@ public interface AppManager extends UserPersistence, EBikePersistence, RidePersi
      * @return true if the ride was successfully deleted
      */
     boolean endRide(int userID, int bikeID);
+
+    void attachResourceRequest(ResourceRequest resourceRequest);
 
 }

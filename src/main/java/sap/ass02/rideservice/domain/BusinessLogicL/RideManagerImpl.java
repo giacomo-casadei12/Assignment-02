@@ -15,7 +15,7 @@ public class RideManagerImpl implements RideManager {
 
     final private static double BATTERY_CONSUMPTION_PER_METER = 0.5;
     final private static double CREDIT_CONSUMPTION_PER_SECOND = 1;
-    private PersistenceNotificationService persistenceNotificationService;
+    private NotificationService notificationService;
 
     @Override
     public boolean startRide(User user, EBike bike) {
@@ -24,8 +24,8 @@ public class RideManagerImpl implements RideManager {
         if (user.credit() > 0 && Objects.equals(bike.state(), EBikeState.AVAILABLE.toString())) {
             success = true;
             bike.setState(EBikeState.IN_USE.toString());
-            if (this.persistenceNotificationService != null) {
-                this.persistenceNotificationService.notifyUpdateEBike(bike);
+            if (this.notificationService != null) {
+                this.notificationService.notifyUpdateEBike(bike);
             }
         }
 
@@ -53,10 +53,10 @@ public class RideManagerImpl implements RideManager {
             }
         }
 
-        if (this.persistenceNotificationService != null) {
-            this.persistenceNotificationService.notifyUpdateEBike(bike);
-            this.persistenceNotificationService.notifyUpdateUser(user);
-            if (stopRide) this.persistenceNotificationService.notifyEndRide(user, bike);
+        if (this.notificationService != null) {
+            this.notificationService.notifyUpdateEBike(bike);
+            this.notificationService.notifyUpdateUser(user);
+            if (stopRide) this.notificationService.notifyEndRide(user, bike);
         }
 
         return new Pair<>(user.credit(),bike.battery());
@@ -69,17 +69,17 @@ public class RideManagerImpl implements RideManager {
             bike.setState(EBikeState.AVAILABLE.toString());
         }
 
-        if (this.persistenceNotificationService != null) {
-            this.persistenceNotificationService.notifyUpdateEBike(bike);
-            this.persistenceNotificationService.notifyEndRide(user, bike);
+        if (this.notificationService != null) {
+            this.notificationService.notifyUpdateEBike(bike);
+            this.notificationService.notifyEndRide(user, bike);
         }
 
         return true;
     }
 
     @Override
-    public void attachPersistenceNotificationService(PersistenceNotificationService persistenceNotificationService) {
-        this.persistenceNotificationService = persistenceNotificationService;
+    public void attachPersistenceNotificationService(NotificationService persistenceNotificationService) {
+        this.notificationService = persistenceNotificationService;
     }
 
     private void updatedBattery(EBike bike, int positionX, int positionY) {

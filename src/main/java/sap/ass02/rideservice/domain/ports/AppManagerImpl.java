@@ -1,28 +1,25 @@
 package sap.ass02.rideservice.domain.ports;
 
-import sap.ass02.rideservice.domain.BusinessLogicL.PersistenceNotificationService;
+import sap.ass02.rideservice.domain.BusinessLogicL.NotificationService;
 import sap.ass02.rideservice.domain.BusinessLogicL.RideManager;
 import sap.ass02.rideservice.domain.entities.*;
-import sap.ass02.rideservice.domain.ports.dataAccessPorts.EBikeDA;
 import sap.ass02.rideservice.domain.ports.dataAccessPorts.RideDA;
-import sap.ass02.rideservice.domain.ports.dataAccessPorts.UserDA;
-import sap.ass02.rideservice.utils.EBikeState;
 import sap.ass02.rideservice.utils.Pair;
 
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The implementation of the AppManager interface.
  */
-public class AppManagerImpl implements AppManager, PersistenceNotificationService {
+public class AppManagerImpl implements AppManager, NotificationService {
 
-    private final EBikeDA bikeDA;
     private final RideDA rideDA;
-    private final UserDA userDA;
     private final RideManager rideManager;
+    private ResourceRequest resourceRequest;
     private final Map<Pair<Integer, Integer>, Long> rideUpdateTimes = new ConcurrentHashMap<>();
 
     /**
@@ -30,19 +27,10 @@ public class AppManagerImpl implements AppManager, PersistenceNotificationServic
      *
      * @param rideManager the logic for handle rides
      * @param rideDA      the persistence abstraction for rides
-     * @param bikeDA      the persistence abstraction for bikes
-     * @param userDA      the persistence abstraction for users
      */
-    public AppManagerImpl(RideManager rideManager, RideDA rideDA, EBikeDA bikeDA, UserDA userDA) {
-        this.bikeDA = bikeDA;
+    public AppManagerImpl(RideManager rideManager, RideDA rideDA) {
         this.rideDA = rideDA;
-        this.userDA = userDA;
         this.rideManager = rideManager;
-    }
-
-    @Override
-    public EBike getEBike(int id) {
-        return this.bikeDA.getEBikeById(id);
     }
 
     @Override
@@ -70,22 +58,6 @@ public class AppManagerImpl implements AppManager, PersistenceNotificationServic
     }
 
     @Override
-    public boolean updateUser(int id, int credit) {
-        return this.userDA.updateUser(id, credit);
-    }
-
-    @Override
-    public boolean updateEBike(int id, int battery, EBikeState state, int positionX, int positionY) {
-        EBike bike = new EBikeImpl();
-        bike.setBattery(battery);
-        bike.setId(id);
-        bike.setPositionX(positionX);
-        bike.setPositionY(positionY);
-        bike.setState(state.toString());
-        return this.bikeDA.updateEBike(bike);
-    }
-
-    @Override
     public boolean endRide(int id) {
         return this.rideDA.endRide(id);
     }
@@ -96,27 +68,20 @@ public class AppManagerImpl implements AppManager, PersistenceNotificationServic
     }
 
     @Override
-    public void notifyUpdateUser(User user) {
-        this.updateUser(user.id(), user.credit());
-    }
-
-    @Override
-    public void notifyUpdateEBike(EBike bike) {
-        this.updateEBike(bike.id(), bike.battery(), EBikeState.valueOf(bike.state()),
-                bike.positionX(), bike.positionY());
-    }
-
-    @Override
-    public void notifyEndRide(User user, EBike bike) {
-        Ride ride = this.getRide(0, user.id());
-        this.endRide(ride.id());
-    }
-
-    @Override
     public boolean startRide(int userID, int bikeID) {
-        User user = this.userDA.getUserById(userID);
-        EBike eBike = this.bikeDA.getEBikeById(bikeID);
         var now = new Date().getTime();
+        User user = new UserImpl();
+        EBike eBike = new EBikeImpl();
+        CompletableFuture<EBike> cfb = this.resourceRequest.getBike(bikeID).toCompletionStage().toCompletableFuture();
+        CompletableFuture<User> cfu = this.resourceRequest.getUser(userID).toCompletionStage().toCompletableFuture();
+        CompletableFuture<Void> cf = CompletableFuture.allOf(cfb, cfu);
+        cf.join();
+        try  {
+            eBike = cfb.get();
+            user = cfu.get();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         rideUpdateTimes.put(new Pair<>(user.id(), eBike.id()), now);
         boolean success = this.rideManager.startRide(user,eBike);
         if (success) {
@@ -127,9 +92,19 @@ public class AppManagerImpl implements AppManager, PersistenceNotificationServic
 
     @Override
     public Pair<Integer, Integer> updateRide(int userID, int bikeID, int x, int y) {
-        User user = this.userDA.getUserById(userID);
-        EBike eBike = this.bikeDA.getEBikeById(bikeID);
         var now = new Date().getTime();
+        User user = new UserImpl();
+        EBike eBike = new EBikeImpl();
+        CompletableFuture<EBike> cfb = this.resourceRequest.getBike(bikeID).toCompletionStage().toCompletableFuture();
+        CompletableFuture<User> cfu = this.resourceRequest.getUser(userID).toCompletionStage().toCompletableFuture();
+        CompletableFuture<Void> cf = CompletableFuture.allOf(cfb, cfu);
+        cf.join();
+        try  {
+            eBike = cfb.get();
+            user = cfu.get();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         long last = rideUpdateTimes.get(new Pair<>(user.id(), eBike.id()));
         long timeElapsed = now - last;
         rideUpdateTimes.put(new Pair<>(user.id(), eBike.id()), now);
@@ -138,8 +113,43 @@ public class AppManagerImpl implements AppManager, PersistenceNotificationServic
 
     @Override
     public boolean endRide(int userID, int bikeID) {
-        User user = this.userDA.getUserById(userID);
-        EBike eBike = this.bikeDA.getEBikeById(bikeID);
+        User user = new UserImpl();
+        EBike eBike = new EBikeImpl();
+        CompletableFuture<EBike> cfb = this.resourceRequest.getBike(bikeID).toCompletionStage().toCompletableFuture();
+        CompletableFuture<User> cfu = this.resourceRequest.getUser(userID).toCompletionStage().toCompletableFuture();
+        CompletableFuture<Void> cf = CompletableFuture.allOf(cfb, cfu);
+        cf.join();
+        try  {
+            eBike = cfb.get();
+            user = cfu.get();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         return this.rideManager.endRide(user,eBike);
     }
+
+    @Override
+    public void attachResourceRequest(ResourceRequest resourceRequest) {
+        this.resourceRequest = resourceRequest;
+    }
+
+
+    @Override
+    public void notifyUpdateUser(User user) {
+        this.resourceRequest.spreadUserChange(user);
+    }
+
+    @Override
+    public void notifyUpdateEBike(EBike bike) {
+        this.resourceRequest.spreadEBikeChange(bike);
+    }
+
+
+    @Override
+    public void notifyEndRide(User user, EBike bike) {
+        Ride ride = this.getRide(0, user.id());
+        this.endRide(ride.id());
+        this.resourceRequest.spreadRideChanges(ride,false);
+    }
+
 }

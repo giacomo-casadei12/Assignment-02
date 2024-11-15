@@ -2,6 +2,8 @@ package sap.ass02.userservice.infrastructure;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.config.MemberAttributeConfig;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
@@ -40,6 +42,7 @@ public class WebController extends AbstractVerticle {
      * The Vertx.
      */
     Vertx vertx;
+    HazelcastInstance hazelcastInstance;
     final private AppManager pManager;
 
     /**
@@ -64,6 +67,7 @@ public class WebController extends AbstractVerticle {
         Vertx.clusteredVertx(options, cluster -> {
             if (cluster.succeeded()) {
                 vertx = cluster.result();
+                hazelcastInstance = ((HazelcastClusterManager) clusterManager).getHazelcastInstance();
                 vertx.deployVerticle(this);
             } else {
                 System.out.println("Cluster up failed: " + cluster.cause());
@@ -171,6 +175,9 @@ public class WebController extends AbstractVerticle {
                         String username = requestBody.getString(USERNAME);
                         String password = requestBody.getString(PASSWORD);
                         b = pManager.login(username, password);
+                        ITopic<String> topic = hazelcastInstance.getTopic("Grodus");
+                        JsonObject busPayload = new JsonObject();
+                        topic.publish(busPayload.toString());
                         checkResponseAndSendReply(context, b);
                     } else {
                         invalidJSONReply(context,requestBody);

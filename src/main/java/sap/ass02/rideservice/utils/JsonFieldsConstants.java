@@ -58,4 +58,11 @@ public class JsonFieldsConstants {
      */
     public static final String RIDE_ID = "rideId";
 
+    public static final String SERVICE_NAME = "serviceName";
+
+    public static final String SERVICE_PORT = "servicePort";
+
+    public static final String SERVICE_ADDRESS = "serviceAddress";
+
+    public static final String TOPIC = "topic";
 }

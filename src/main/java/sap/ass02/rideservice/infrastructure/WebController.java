@@ -1,10 +1,11 @@
 package sap.ass02.rideservice.infrastructure;
 
 import com.hazelcast.config.Config;
+import com.hazelcast.config.ListenerConfig;
 import com.hazelcast.config.MemberAttributeConfig;
-import io.vertx.core.AbstractVerticle;
-import io.vertx.core.Vertx;
-import io.vertx.core.VertxOptions;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import io.vertx.core.*;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
@@ -14,34 +15,48 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.spi.cluster.ClusterManager;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
-import sap.ass02.rideservice.domain.entities.Ride;
+import sap.ass02.rideservice.ClusterMembershipListenerImpl;
+import sap.ass02.rideservice.ServiceLookupImpl;
+import sap.ass02.rideservice.ServiceLookup;
+import sap.ass02.rideservice.domain.entities.*;
 import sap.ass02.rideservice.domain.ports.AppManager;
+import sap.ass02.rideservice.domain.ports.ResourceRequest;
 import sap.ass02.rideservice.utils.*;
 
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static sap.ass02.gui.utils.JsonFieldsConstants.CREDIT;
+import static sap.ass02.gui.utils.JsonFieldsConstants.OPERATION;
+import static sap.ass02.gui.utils.JsonFieldsConstants.RESULT;
+import static sap.ass02.gui.utils.JsonFieldsConstants.USERNAME;
+import static sap.ass02.gui.utils.JsonFieldsConstants.USER_ID;
 import static sap.ass02.rideservice.utils.JsonFieldsConstants.*;
 
 /**
  * The Vertx Server that handles all request
  * coming from clients.
  */
-public class WebController extends AbstractVerticle {
+public class WebController extends AbstractVerticle implements ResourceRequest {
 
     private final int port;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
+    private static final String EBIKE_QUERY_PATH = "/api/ebike/query";
+    private static final String USER_QUERY_PATH = "/api/user/query";
     private static final String BIKE_CHANGE_EVENT_TOPIC = "ebike-Change";
     private static final String USER_CHANGE_EVENT_TOPIC = "users-Change";
     /**
      * The Vertx.
      */
     Vertx vertx;
+    HazelcastInstance hazelcastInstance;
     final private AppManager pManager;
+    final ServiceLookup serviceLookup;
 
     /**
      * Instantiates a new Web controller.
@@ -50,6 +65,7 @@ public class WebController extends AbstractVerticle {
         this.port = 8080;
         LOGGER.setLevel(Level.FINE);
         this.pManager = appManager;
+        this.serviceLookup = new ServiceLookupImpl();
         Config hazelcastConfig = new Config();
         hazelcastConfig.setClusterName("EBikeCesena");
         Map<String, String> attributes = new HashMap<>();
@@ -57,6 +73,7 @@ public class WebController extends AbstractVerticle {
         attributes.put("SERVICE_ADDRESS","localhost");
         attributes.put("SERVICE_PORT","8080");
         hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
+        hazelcastConfig.addListenerConfig(new ListenerConfig(new ClusterMembershipListenerImpl(this.serviceLookup)));
         ClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
         // Create VertxOptions with the Hazelcast Cluster Manager
@@ -65,6 +82,8 @@ public class WebController extends AbstractVerticle {
         Vertx.clusteredVertx(options, cluster -> {
             if (cluster.succeeded()) {
                 vertx = cluster.result();
+                hazelcastInstance = ((HazelcastClusterManager) clusterManager).getHazelcastInstance();
+                serviceLookup.setVertxInstance(vertx);
                 vertx.deployVerticle(this);
             } else {
                 System.out.println("Cluster up failed: " + cluster.cause());
@@ -86,7 +105,7 @@ public class WebController extends AbstractVerticle {
         server.requestHandler(router).listen(port);
 
         if (LOGGER.isLoggable(Level.FINE)) {
-            LOGGER.log(Level.INFO, "EBikeCesena web server ready on port: " + port);
+            LOGGER.log(Level.INFO, "EBikeCesena RideService web server ready on port: " + port);
         }
 
     }
@@ -113,7 +132,6 @@ public class WebController extends AbstractVerticle {
                             int userId = requestBody.getInteger(USER_ID);
                             int eBikeId = requestBody.getInteger(E_BIKE_ID);
                             b = pManager.startRide(userId, eBikeId);
-                            this.checkBikeChangesAndNotifyAll(eBikeId);
                             checkResponseAndSendReply(context, b);
                         } else {
                             invalidJSONReply(context,requestBody);
@@ -128,8 +146,6 @@ public class WebController extends AbstractVerticle {
                             int x = requestBody.getInteger(POSITION_X);
                             int y = requestBody.getInteger(POSITION_Y);
                             Pair<Integer, Integer> p = pManager.updateRide(userId, eBikeId, x, y);
-                            this.checkBikeChangesAndNotifyAll(eBikeId);
-                            this.notifyUserChanged(userId, p.first());
                             var map = new HashMap<String, Object>();
                             map.put(CREDIT, p.first());
                             map.put(BATTERY, p.second());
@@ -144,7 +160,6 @@ public class WebController extends AbstractVerticle {
                             int userId = requestBody.getInteger(USER_ID);
                             int eBikeId = requestBody.getInteger(E_BIKE_ID);
                             b = pManager.endRide(userId, eBikeId);
-                            this.checkBikeChangesAndNotifyAll(eBikeId);
                             checkResponseAndSendReply(context, b);
                         } else if (requestBody.containsKey(RIDE_ID)) {
                             int rideId = requestBody.getInteger(RIDE_ID);
@@ -280,11 +295,6 @@ public class WebController extends AbstractVerticle {
         return map;
     }
 
-    private void checkBikeChangesAndNotifyAll(int eBikeId) {
-        var bike = this.pManager.getEBike(eBikeId);
-        this.notifyEBikeChanged(eBikeId, bike.positionX(), bike.positionY(), bike.battery(), bike.state());
-    }
-
     private void notifyEBikeChanged(int eBikeId, int x, int y, int battery, String status) {
         if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.log(Level.INFO, "notify ebike changed");
@@ -320,4 +330,106 @@ public class WebController extends AbstractVerticle {
         response.end(reply.toString());
     }
 
+    @Override
+    public Future<User> getUser(int id) {
+        Promise<User> promise = Promise.promise();
+        JsonObject requestPayload = new JsonObject();
+        requestPayload.put(USER_ID, id);
+        requestPayload.put(OPERATION, WebOperation.READ.ordinal());
+
+        Optional<WebClient> client = serviceLookup.getAPIGatewayClient();
+        if (client.isPresent()) {
+            client.get().post(USER_QUERY_PATH)
+                    .sendJson(requestPayload, ar -> {
+                        if (ar.succeeded()) {
+                            JsonObject res = ar.result().bodyAsJsonObject();
+                            if (res.containsKey(RESULT)) {
+                                var resList = res.getJsonArray(RESULT);
+                                var it = resList.stream().iterator();
+                                var resUser = new UserImpl();
+                                if (it.hasNext()) {
+                                    var jsonObj = (JsonObject) it.next();
+                                    int resId = Integer.parseInt(jsonObj.getString(USER_ID));
+                                    resUser.setId(resId);
+                                    resUser.setCredit(Integer.parseInt(jsonObj.getString(CREDIT)));
+                                    resUser.setName(jsonObj.getString(USERNAME));
+                                    resUser.setIsAdmin(Boolean.parseBoolean(jsonObj.getString("admin")));
+                                }
+                                promise.complete(resUser);
+                            }
+                        } else {
+                            LOGGER.severe(ar.cause().getMessage());
+                        }
+                    });
+        } else {
+            System.out.println("EBikeCesena Api Gateway client not found");
+        }
+        return promise.future();
+    }
+
+    @Override
+    public Future<EBike> getBike(int id) {
+        Promise<EBike> promise = Promise.promise();
+        JsonObject requestPayload = new JsonObject();
+        requestPayload.put(E_BIKE_ID, id);
+        requestPayload.put(OPERATION, WebOperation.READ.ordinal());
+
+        Optional<WebClient> client = serviceLookup.getAPIGatewayClient();
+        if (client.isPresent()) {
+            client.get().post(EBIKE_QUERY_PATH)
+                    .sendJson(requestPayload, ar -> {
+                        if (ar.succeeded()) {
+                            JsonObject res = ar.result().bodyAsJsonObject();
+                            if (res.containsKey(RESULT)) {
+                                var resList = res.getJsonArray(RESULT);
+                                var it = resList.stream().iterator();
+                                var resBike = new EBikeImpl();
+                                if (it.hasNext()) {
+                                    var jsonObj = (JsonObject) it.next();
+                                    int resId = Integer.parseInt(jsonObj.getString(E_BIKE_ID));
+                                    resBike.setId(resId);
+                                    resBike.setBattery(jsonObj.getInteger(BATTERY));
+                                    resBike.setPositionX(jsonObj.getInteger(POSITION_X));
+                                    resBike.setPositionY(jsonObj.getInteger(POSITION_Y));
+                                    resBike.setState(jsonObj.getString("status"));
+                                }
+                                promise.complete(resBike);
+                            }
+                        } else {
+                            LOGGER.severe(ar.cause().getMessage());
+                        }
+                    });
+        } else {
+            System.out.println("EBikeCesena Api Gateway client not found");
+        }
+        return promise.future();
+    }
+
+    @Override
+    public void spreadUserChange(User user) {
+        ITopic<String> topic = hazelcastInstance.getTopic("UserChangedFromRideService");
+        JsonObject busPayload = new JsonObject();
+        busPayload.put(USER_ID, user.id());
+        busPayload.put(CREDIT, user.credit());
+
+        topic.publish(busPayload.toString());
+    }
+
+    @Override
+    public void spreadEBikeChange(EBike bike) {
+        ITopic<String> topic = hazelcastInstance.getTopic("BikeChangedFromRideService");
+        JsonObject busPayload = new JsonObject();
+        busPayload.put(E_BIKE_ID, bike.id());
+        busPayload.put(POSITION_X, bike.positionX());
+        busPayload.put(POSITION_Y, bike.positionY());
+        busPayload.put("status", bike.state());
+        busPayload.put(BATTERY, bike.battery());
+
+        topic.publish(busPayload.toString());
+    }
+
+    @Override
+    public void spreadRideChanges(Ride ride, boolean start) {
+
+    }
 }

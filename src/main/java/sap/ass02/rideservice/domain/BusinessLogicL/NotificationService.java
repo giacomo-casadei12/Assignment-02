@@ -6,7 +6,7 @@ import sap.ass02.rideservice.domain.entities.User;
 /**
  * The interface that will detect any changes done to entities by a RideManager.
  */
-public interface PersistenceNotificationService {
+public interface NotificationService {
 
     /**
      * Notify the update of a user.

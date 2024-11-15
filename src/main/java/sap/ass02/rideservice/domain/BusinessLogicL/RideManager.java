@@ -49,6 +49,6 @@ public interface RideManager {
      *
      * @param persistenceNotificationService the instance of a PersistenceNotificationService
      */
-    void attachPersistenceNotificationService(PersistenceNotificationService persistenceNotificationService);
+    void attachPersistenceNotificationService(NotificationService persistenceNotificationService);
 
 }
