@@ -3,6 +3,7 @@ package sap.ass02.userservice.infrastructure;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.MemberAttributeConfig;
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.shaded.org.json.JSONObject;
 import com.hazelcast.topic.ITopic;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
@@ -20,6 +21,7 @@ import io.vertx.ext.web.handler.StaticHandler;
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
 import sap.ass02.userservice.domain.entities.User;
 import sap.ass02.userservice.domain.ports.AppManager;
+import sap.ass02.userservice.domain.ports.ResourceNotification;
 import sap.ass02.userservice.utils.WebOperation;
 
 import java.util.*;
@@ -33,11 +35,10 @@ import static sap.ass02.userservice.utils.JsonFieldsConstants.*;
  * The Vertx Server that handles all request
  * coming from clients.
  */
-public class WebController extends AbstractVerticle {
+public class WebController extends AbstractVerticle implements ResourceNotification {
 
     private final int port;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
-    private static final String BIKE_CHANGE_EVENT_TOPIC = "ebike-Change";
     private static final String USER_CHANGE_EVENT_TOPIC = "users-Change";
     /**
      * The Vertx.
@@ -92,6 +93,14 @@ public class WebController extends AbstractVerticle {
         if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.log(Level.INFO, "EBikeCesena web server ready on port: " + port);
         }
+
+        ITopic<String> topic = hazelcastInstance.getTopic("UserChangedFromRideService");
+        topic.addMessageListener(message -> {
+            String jsonString = message.getMessageObject();
+            JSONObject json = new JSONObject(jsonString);
+
+            pManager.updateUser(json.getInt(USER_ID),json.getInt(CREDIT));
+        });
 
     }
 
@@ -176,9 +185,6 @@ public class WebController extends AbstractVerticle {
                         String username = requestBody.getString(USERNAME);
                         String password = requestBody.getString(PASSWORD);
                         b = pManager.login(username, password);
-                        ITopic<String> topic = hazelcastInstance.getTopic("Grodus");
-                        JsonObject busPayload = new JsonObject();
-                        topic.publish(busPayload.toString());
                         checkResponseAndSendReply(context, b);
                     } else {
                         invalidJSONReply(context,requestBody);
@@ -262,4 +268,13 @@ public class WebController extends AbstractVerticle {
         response.end(reply.toString());
     }
 
+    @Override
+    public void spreadUserChange(Integer id, Integer credit) {
+        ITopic<String> topic = hazelcastInstance.getTopic("UserChangedFromUserService");
+        JsonObject busPayload = new JsonObject();
+        busPayload.put(USER_ID, id);
+        busPayload.put(CREDIT, credit);
+
+        topic.publish(busPayload.toString());
+    }
 }

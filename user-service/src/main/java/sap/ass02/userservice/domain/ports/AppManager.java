@@ -7,4 +7,6 @@ package sap.ass02.userservice.domain.ports;
  */
 public interface AppManager extends UserPersistence{
 
+    void attachResourceNotification(ResourceNotification resource);
+
 }

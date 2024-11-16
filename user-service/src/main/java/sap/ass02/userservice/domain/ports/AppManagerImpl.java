@@ -12,6 +12,7 @@ import java.util.List;
 public class AppManagerImpl implements AppManager, PersistenceNotificationService {
 
     private final UserDA userDA;
+    private ResourceNotification resourceNotification;
 
     /**
      * Instantiates a new App Manager
@@ -45,7 +46,11 @@ public class AppManagerImpl implements AppManager, PersistenceNotificationServic
 
     @Override
     public boolean updateUser(int id, int credit) {
-        return this.userDA.updateUser(id, credit);
+        boolean result = this.userDA.updateUser(id, credit);
+        if (this.resourceNotification != null) {
+            this.resourceNotification.spreadUserChange(id, credit);
+        }
+        return result;
     }
 
     @Override
@@ -58,4 +63,8 @@ public class AppManagerImpl implements AppManager, PersistenceNotificationServic
         return this.userDA.deleteUser(id);
     }
 
+    @Override
+    public void attachResourceNotification(ResourceNotification resource) {
+        this.resourceNotification = resource;
+    }
 }

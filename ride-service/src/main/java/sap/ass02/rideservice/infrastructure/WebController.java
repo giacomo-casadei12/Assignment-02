@@ -306,19 +306,6 @@ public class WebController extends AbstractVerticle implements ResourceRequest {
         eb.publish(BIKE_CHANGE_EVENT_TOPIC, obj);
     }
 
-    private void notifyUserChanged(int userId, int credit) {
-        if (LOGGER.isLoggable(Level.FINE)) {
-            LOGGER.log(Level.INFO, "notify user changed");
-        }
-        EventBus eb = vertx.eventBus();
-
-        JsonObject obj = new JsonObject();
-        obj.put("event", USER_CHANGE_EVENT_TOPIC);
-        obj.put(USER_ID, userId);
-        obj.put(CREDIT, credit);
-        eb.publish(USER_CHANGE_EVENT_TOPIC, obj);
-    }
-
     private void sendReply(RoutingContext request, JsonObject reply) {
         HttpServerResponse response = request.response();
         response.putHeader("content-type", "application/json");

@@ -4,12 +4,12 @@ import com.hazelcast.config.Config;
 import com.hazelcast.config.ListenerConfig;
 import com.hazelcast.config.MemberAttributeConfig;
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.shaded.org.json.JSONObject;
 import com.hazelcast.topic.ITopic;
-import com.hazelcast.topic.Message;
-import com.hazelcast.topic.MessageListener;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
+import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
@@ -21,7 +21,6 @@ import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
-import sap.ass02.apigateway.utils.WebOperation;
 
 import java.util.*;
 import java.util.logging.Level;
@@ -93,26 +92,42 @@ public class ApiGateway extends AbstractVerticle {
         router.route(HttpMethod.POST, RIDE_COMMAND_PATH).handler(this::processServiceRideCmd);
         router.route(HttpMethod.GET, RIDE_QUERY_PATH).handler(this::processServiceRideQuery);
 
-        router.route(HttpMethod.POST, SERVICE_COMMAND_PATH).handler(this::processServiceCmd);
-
         server.requestHandler(router).listen(port);
 
         if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.log(Level.INFO, "EBikeCesena Api Gateway ready on port: " + port);
         }
 
-        ITopic<String> topic = hazelcastInstance.getTopic("Grodus");
+        ITopic<String> topic = hazelcastInstance.getTopic("UserChangedFromUserService");
         topic.addMessageListener(message -> {
-            /*String jsonString = message.getMessageObject();
+            String jsonString = message.getMessageObject();
             JSONObject json = new JSONObject(jsonString);
+            if (LOGGER.isLoggable(Level.FINE)) {
+                LOGGER.log(Level.INFO, "notify user changed");
+            }
+            EventBus eb = vertx.eventBus();
 
-            // Extract values from the JSONObject
-            String name = json.getString("name");
-            int age = json.getInt("age");
-*/
-            // Process the received data
-            System.out.println("Received: Groda");
+            JsonObject obj = new JsonObject();
+            obj.put("event", USER_CHANGE_EVENT_TOPIC);
+            obj.put(USER_ID, obj.getInteger(USER_ID));
+            obj.put(CREDIT, obj.getInteger(CREDIT));
+            eb.publish(USER_CHANGE_EVENT_TOPIC, obj);
         });
+
+        ITopic<String> bikeTopic = hazelcastInstance.getTopic("BikeChangedFromBikeService");
+        bikeTopic.addMessageListener(message -> {
+            if (LOGGER.isLoggable(Level.FINE)) {
+                LOGGER.log(Level.INFO, "notify ebike changed");
+            }
+            EventBus eb = vertx.eventBus();
+            String jsonString = message.getMessageObject();
+            JsonObject obj = new JsonObject(jsonString);
+            obj.put("event", BIKE_CHANGE_EVENT_TOPIC);
+
+            eb.publish(BIKE_CHANGE_EVENT_TOPIC, obj);
+
+        });
+
     }
 
     protected void processServiceEBikeCmd(RoutingContext context) {
@@ -208,110 +223,6 @@ public class ApiGateway extends AbstractVerticle {
                     });
         } else {
             System.out.println("EBikeCesena Api Gateway client not found");
-        }
-    }
-
-    protected void processServiceCmd(RoutingContext context) {
-        if (LOGGER.isLoggable(Level.FINE)) {
-            LOGGER.log(Level.INFO, "New service request " + context.currentRoute().getPath());
-        }
-        new Thread(() -> {
-            JsonObject requestBody = context.body().asJsonObject();
-            if (requestBody != null && requestBody.containsKey(OPERATION)) {
-                WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];
-                boolean b = false;
-                switch (op) {
-                    case CREATE:  {
-                        if (requestBody.containsKey(SERVICE_NAME) && requestBody.containsKey(SERVICE_PORT) &&
-                            requestBody.containsKey(SERVICE_ADDRESS)) {
-                            checkServiceAndPlugIt(requestBody);
-                            b = true;
-                        } else {
-                            invalidJSONReply(context,requestBody);
-                        }
-                        break;
-                    }
-                    case UPDATE:  {
-                        if (requestBody.containsKey(SERVICE_NAME) && requestBody.containsKey(TOPIC)) {
-                            checkServiceAndHandleTopic(requestBody);
-                            b = true;
-                        } else {
-                            invalidJSONReply(context,requestBody);
-                        }
-                        break;
-                    }
-                    case DELETE:  {
-                        if (requestBody.containsKey(SERVICE_NAME)) {
-                            checkServiceAndUnplugIt(requestBody);
-                            b = true;
-                        } else {
-                            invalidJSONReply(context,requestBody);
-                        }
-                        break;
-                    }
-                    default: invalidJSONReply(context,requestBody);
-                }
-                checkResponseAndSendReply(context, b);
-            } else {
-                invalidJSONReply(context,requestBody);
-            }
-        }).start();
-    }
-
-    private void checkServiceAndPlugIt(JsonObject requestBody) {
-        String serviceName = requestBody.getString(SERVICE_NAME);
-        switch (serviceName) {
-            case "BikeService":
-                if (!serviceLookup.isBikeServiceConnected()) {
-                    serviceLookup.plugBikeService(requestBody.getString(SERVICE_ADDRESS),
-                            requestBody.getInteger(SERVICE_PORT));
-                }
-                break;
-            case "UserService":
-                System.out.println("pipo");
-                if (!serviceLookup.isUserServiceConnected()) {
-                    serviceLookup.plugUserService(requestBody.getString(SERVICE_ADDRESS),
-                            requestBody.getInteger(SERVICE_PORT));
-                }
-                break;
-            case "RideService":
-                if (!serviceLookup.isRideServiceConnected()) {
-                    serviceLookup.plugRideService(requestBody.getString(SERVICE_ADDRESS),
-                            requestBody.getInteger(SERVICE_PORT));
-                }
-                break;
-        }
-    }
-
-    private void checkServiceAndHandleTopic(JsonObject requestBody) {
-        String topic = requestBody.getString(TOPIC);
-        switch (topic) {
-            case BIKE_CHANGE_EVENT_TOPIC:
-                break;
-            case USER_CHANGE_EVENT_TOPIC:
-                break;
-            default:
-        }
-    }
-
-    private void checkServiceAndUnplugIt(JsonObject requestBody) {
-        String serviceName = requestBody.getString(SERVICE_NAME);
-        switch (serviceName) {
-            case "BikeService":
-                if (serviceLookup.isBikeServiceConnected()) {
-                    serviceLookup.unplugBikeService();
-                }
-                break;
-            case "UserService":
-                if (serviceLookup.isUserServiceConnected()) {
-                    serviceLookup.unplugUserService();
-                }
-                break;
-            case "RideService":
-                if (serviceLookup.isRideServiceConnected()) {
-                    serviceLookup.unplugRideService();
-                }
-                break;
         }
     }
 

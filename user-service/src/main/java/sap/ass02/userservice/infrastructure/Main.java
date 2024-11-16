@@ -2,6 +2,7 @@ package sap.ass02.userservice.infrastructure;
 
 import sap.ass02.userservice.domain.ports.AppManager;
 import sap.ass02.userservice.domain.ports.AppManagerImpl;
+import sap.ass02.userservice.domain.ports.ResourceNotification;
 import sap.ass02.userservice.domain.ports.dataAccessPorts.UserDA;
 import sap.ass02.userservice.infrastructure.DataAccessL.UserDB;
 
@@ -18,7 +19,8 @@ public class Main {
     public static void main(String[] args) {
         UserDA userDA = new UserDB();
         AppManager am = new AppManagerImpl(userDA);
-        new WebController(am);
+        ResourceNotification rn = new WebController(am);
+        am.attachResourceNotification(rn);
     }
 
 }
