@@ -2,9 +2,6 @@ package sap.ass02.userservice.infrastructure;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.config.MemberAttributeConfig;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.shaded.org.json.JSONObject;
-import com.hazelcast.topic.ITopic;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
@@ -44,7 +41,6 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
      * The Vertx.
      */
     Vertx vertx;
-    HazelcastInstance hazelcastInstance;
     final private AppManager pManager;
 
     /**
@@ -69,7 +65,6 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
         Vertx.clusteredVertx(options, cluster -> {
             if (cluster.succeeded()) {
                 vertx = cluster.result();
-                hazelcastInstance = ((HazelcastClusterManager) clusterManager).getHazelcastInstance();
                 vertx.deployVerticle(this);
             } else {
                 System.out.println("Cluster up failed: " + cluster.cause());
@@ -94,14 +89,11 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
             LOGGER.log(Level.INFO, "EBikeCesena web server ready on port: " + port);
         }
 
-        ITopic<String> topic = hazelcastInstance.getTopic("UserChangedFromRideService");
-        topic.addMessageListener(message -> {
-            String jsonString = message.getMessageObject();
-            JSONObject json = new JSONObject(jsonString);
+        vertx.eventBus().consumer("UserChangedFromRideService", msg -> {
+            JsonObject json = new JsonObject(msg.body().toString());
 
-            pManager.updateUser(json.getInt(USER_ID),json.getInt(CREDIT));
+            pManager.updateUser(json.getInteger(USER_ID),json.getInteger(CREDIT));
         });
-
     }
 
     /**
@@ -270,11 +262,10 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
 
     @Override
     public void spreadUserChange(Integer id, Integer credit) {
-        ITopic<String> topic = hazelcastInstance.getTopic("UserChangedFromUserService");
         JsonObject busPayload = new JsonObject();
         busPayload.put(USER_ID, id);
         busPayload.put(CREDIT, credit);
 
-        topic.publish(busPayload.toString());
+        vertx.eventBus().publish("UserChangedFromUserService", busPayload);
     }
 }

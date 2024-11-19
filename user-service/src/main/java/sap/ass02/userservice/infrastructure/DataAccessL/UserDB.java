@@ -71,7 +71,7 @@ public class UserDB implements UserDA {
         User user = null;
         try (Connection connection = ds.getConnection()) {
             Statement stmt = connection.createStatement();
-            ResultSet rs = stmt.executeQuery("SELECT * FROM users WHERE ID = " + id);
+            ResultSet rs = stmt.executeQuery("SELECT * FROM users WHERE UserId = " + id);
             user = getMutableUser(user, stmt, rs);
         } catch( SQLException e) {
             throw new IllegalStateException(PROBLEM_IN_THE_QUERY, e);

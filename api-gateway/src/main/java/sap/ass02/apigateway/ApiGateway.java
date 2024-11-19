@@ -3,9 +3,6 @@ package sap.ass02.apigateway;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.ListenerConfig;
 import com.hazelcast.config.MemberAttributeConfig;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.shaded.org.json.JSONObject;
-import com.hazelcast.topic.ITopic;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
@@ -14,7 +11,6 @@ import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonObject;
-import io.vertx.core.spi.cluster.ClusterManager;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.client.WebClient;
@@ -36,7 +32,6 @@ public class ApiGateway extends AbstractVerticle {
     private static final String EBIKE_QUERY_PATH = "/api/ebike/query";
     private static final String RIDE_COMMAND_PATH = "/api/ride/command";
     private static final String RIDE_QUERY_PATH = "/api/ride/query";
-    private static final String SERVICE_COMMAND_PATH = "/api/service/command";
 
     private static final String BIKE_CHANGE_EVENT_TOPIC = "ebike-Change";
     private static final String USER_CHANGE_EVENT_TOPIC = "users-Change";
@@ -46,7 +41,6 @@ public class ApiGateway extends AbstractVerticle {
     private final int port;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
     private Vertx vertx;
-    HazelcastInstance hazelcastInstance;
 
     public ApiGateway() {
         this.port = 8085;
@@ -60,14 +54,13 @@ public class ApiGateway extends AbstractVerticle {
         attributes.put("SERVICE_PORT","8085");
         hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
         hazelcastConfig.addListenerConfig(new ListenerConfig(new ClusterMembershipListenerImpl(this.serviceLookup)));
-        ClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
+        HazelcastClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
         VertxOptions vOptions = new VertxOptions().setClusterManager(clusterManager);
 
         Vertx.clusteredVertx(vOptions, cluster -> {
             if (cluster.succeeded()) {
                 vertx = cluster.result();
-                hazelcastInstance = ((HazelcastClusterManager) clusterManager).getHazelcastInstance();
                 serviceLookup.setVertxInstance(vertx);
                 LOGGER.setLevel(Level.FINE);
                 vertx.deployVerticle(this);
@@ -98,10 +91,8 @@ public class ApiGateway extends AbstractVerticle {
             LOGGER.log(Level.INFO, "EBikeCesena Api Gateway ready on port: " + port);
         }
 
-        ITopic<String> topic = hazelcastInstance.getTopic("UserChangedFromUserService");
-        topic.addMessageListener(message -> {
-            String jsonString = message.getMessageObject();
-            JSONObject json = new JSONObject(jsonString);
+        vertx.eventBus().consumer("UserChangedFromUserService", msg -> {
+            JsonObject json = new JsonObject(msg.body().toString());
             if (LOGGER.isLoggable(Level.FINE)) {
                 LOGGER.log(Level.INFO, "notify user changed");
             }
@@ -109,19 +100,17 @@ public class ApiGateway extends AbstractVerticle {
 
             JsonObject obj = new JsonObject();
             obj.put("event", USER_CHANGE_EVENT_TOPIC);
-            obj.put(USER_ID, obj.getInteger(USER_ID));
-            obj.put(CREDIT, obj.getInteger(CREDIT));
+            obj.put(USER_ID, json.getInteger(USER_ID));
+            obj.put(CREDIT, json.getInteger(CREDIT));
             eb.publish(USER_CHANGE_EVENT_TOPIC, obj);
         });
 
-        ITopic<String> bikeTopic = hazelcastInstance.getTopic("BikeChangedFromBikeService");
-        bikeTopic.addMessageListener(message -> {
+        vertx.eventBus().consumer("BikeChangedFromBikeService", msg -> {
             if (LOGGER.isLoggable(Level.FINE)) {
                 LOGGER.log(Level.INFO, "notify ebike changed");
             }
             EventBus eb = vertx.eventBus();
-            String jsonString = message.getMessageObject();
-            JsonObject obj = new JsonObject(jsonString);
+            JsonObject obj = new JsonObject(msg.body().toString());
             obj.put("event", BIKE_CHANGE_EVENT_TOPIC);
 
             eb.publish(BIKE_CHANGE_EVENT_TOPIC, obj);

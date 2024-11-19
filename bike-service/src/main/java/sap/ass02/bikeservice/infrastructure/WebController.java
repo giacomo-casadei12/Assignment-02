@@ -2,9 +2,6 @@ package sap.ass02.bikeservice.infrastructure;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.config.MemberAttributeConfig;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.shaded.org.json.JSONObject;
-import com.hazelcast.topic.ITopic;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
@@ -39,12 +36,10 @@ public class WebController extends AbstractVerticle {
 
     private final int port;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
-    private static final String BIKE_CHANGE_EVENT_TOPIC = "ebike-Change";
     /**
      * The Vertx.
      */
     Vertx vertx;
-    HazelcastInstance hazelcastInstance;
     final private AppManager pManager;
 
     /**
@@ -69,7 +64,6 @@ public class WebController extends AbstractVerticle {
         Vertx.clusteredVertx(options, cluster -> {
             if (cluster.succeeded()) {
                 vertx = cluster.result();
-                hazelcastInstance = ((HazelcastClusterManager) clusterManager).getHazelcastInstance();
                 vertx.deployVerticle(this);
             } else {
                 System.out.println("Cluster up failed: " + cluster.cause());
@@ -94,17 +88,16 @@ public class WebController extends AbstractVerticle {
             LOGGER.log(Level.INFO, "EBikeCesena web server ready on port: " + port);
         }
 
-        ITopic<String> topic = hazelcastInstance.getTopic("BikeChangedFromRideService");
-        topic.addMessageListener(message -> {
-            String jsonString = message.getMessageObject();
-            JSONObject json = new JSONObject(jsonString);
+        vertx.eventBus().consumer("BikeChangedFromRideService", msg -> {
+            JsonObject json = new JsonObject(msg.body().toString());
 
-            boolean b = pManager.updateEBike(json.getInt(E_BIKE_ID), json.getInt(BATTERY), EBikeState.valueOf(json.getString("status")),
-                            json.getInt(POSITION_X), json.getInt(POSITION_Y));
+            boolean b = pManager.updateEBike(Integer.parseInt(json.getString(E_BIKE_ID)), Integer.parseInt(json.getString(BATTERY)),
+                    EBikeState.valueOf(json.getString("status")),
+                    Integer.parseInt(json.getString(POSITION_X)), Integer.parseInt(json.getString(POSITION_Y)));
 
             if (b) {
-                this.notifyEBikeChanged(json.getInt(E_BIKE_ID), json.getInt(POSITION_X), json.getInt(POSITION_Y),
-                        json.getInt(BATTERY), json.getString("status"));
+                this.notifyEBikeChanged(Integer.parseInt(json.getString(E_BIKE_ID)), Integer.parseInt(json.getString(POSITION_X)), Integer.parseInt(json.getString(POSITION_Y)),
+                        Integer.parseInt(json.getString(BATTERY)), json.getString("status"));
             }
         });
 
@@ -285,8 +278,7 @@ public class WebController extends AbstractVerticle {
         obj.put(POSITION_Y, y);
         obj.put(BATTERY, battery);
         obj.put("status", status);
-        ITopic<String> topic = hazelcastInstance.getTopic("BikeChangedFromBikeService");
-        topic.publish(obj.toString());
+        vertx.eventBus().publish("BikeChangedFromBikeService",obj.toString());
     }
 
     private void sendReply(RoutingContext request, JsonObject reply) {

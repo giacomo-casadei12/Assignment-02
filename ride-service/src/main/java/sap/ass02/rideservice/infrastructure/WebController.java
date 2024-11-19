@@ -3,10 +3,7 @@ package sap.ass02.rideservice.infrastructure;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.ListenerConfig;
 import com.hazelcast.config.MemberAttributeConfig;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
 import io.vertx.core.*;
-import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
@@ -43,13 +40,10 @@ public class WebController extends AbstractVerticle implements ResourceRequest {
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
     private static final String EBIKE_QUERY_PATH = "/api/ebike/query";
     private static final String USER_QUERY_PATH = "/api/user/query";
-    private static final String BIKE_CHANGE_EVENT_TOPIC = "ebike-Change";
-    private static final String USER_CHANGE_EVENT_TOPIC = "users-Change";
     /**
      * The Vertx.
      */
     Vertx vertx;
-    HazelcastInstance hazelcastInstance;
     final private AppManager pManager;
     final ServiceLookup serviceLookup;
 
@@ -77,7 +71,6 @@ public class WebController extends AbstractVerticle implements ResourceRequest {
         Vertx.clusteredVertx(options, cluster -> {
             if (cluster.succeeded()) {
                 vertx = cluster.result();
-                hazelcastInstance = ((HazelcastClusterManager) clusterManager).getHazelcastInstance();
                 serviceLookup.setVertxInstance(vertx);
                 vertx.deployVerticle(this);
             } else {
@@ -290,22 +283,6 @@ public class WebController extends AbstractVerticle implements ResourceRequest {
         return map;
     }
 
-    private void notifyEBikeChanged(int eBikeId, int x, int y, int battery, String status) {
-        if (LOGGER.isLoggable(Level.FINE)) {
-            LOGGER.log(Level.INFO, "notify ebike changed");
-        }
-        EventBus eb = vertx.eventBus();
-
-        JsonObject obj = new JsonObject();
-        obj.put("event", BIKE_CHANGE_EVENT_TOPIC);
-        obj.put(E_BIKE_ID, eBikeId);
-        obj.put(POSITION_X, x);
-        obj.put(POSITION_Y, y);
-        obj.put(BATTERY, battery);
-        obj.put("status", status);
-        eb.publish(BIKE_CHANGE_EVENT_TOPIC, obj);
-    }
-
     private void sendReply(RoutingContext request, JsonObject reply) {
         HttpServerResponse response = request.response();
         response.putHeader("content-type", "application/json");
@@ -321,26 +298,22 @@ public class WebController extends AbstractVerticle implements ResourceRequest {
 
         Optional<WebClient> client = serviceLookup.getAPIGatewayClient();
         if (client.isPresent()) {
-            client.get().post(USER_QUERY_PATH)
+            client.get().get(USER_QUERY_PATH)
                     .sendJson(requestPayload, ar -> {
                         if (ar.succeeded()) {
                             JsonObject res = ar.result().bodyAsJsonObject();
-                            if (res.containsKey(RESULT)) {
-                                var resList = res.getJsonArray(RESULT);
-                                var it = resList.stream().iterator();
-                                var resUser = new UserImpl();
-                                if (it.hasNext()) {
-                                    var jsonObj = (JsonObject) it.next();
-                                    int resId = Integer.parseInt(jsonObj.getString(USER_ID));
-                                    resUser.setId(resId);
-                                    resUser.setCredit(Integer.parseInt(jsonObj.getString(CREDIT)));
-                                    resUser.setName(jsonObj.getString(USERNAME));
-                                    resUser.setIsAdmin(Boolean.parseBoolean(jsonObj.getString("admin")));
-                                }
-                                promise.complete(resUser);
-                            }
+
+                            var resUser = new UserImpl();
+                            int resId = Integer.parseInt(res.getString(USER_ID));
+                            resUser.setId(resId);
+                            resUser.setCredit(Integer.parseInt(res.getString(CREDIT)));
+                            resUser.setName(res.getString(USERNAME));
+                            resUser.setIsAdmin(Boolean.parseBoolean(res.getString(ADMIN)));
+
+                            promise.complete(resUser);
                         } else {
                             LOGGER.severe(ar.cause().getMessage());
+                            promise.fail(ar.cause());
                         }
                     });
         } else {
@@ -358,27 +331,25 @@ public class WebController extends AbstractVerticle implements ResourceRequest {
 
         Optional<WebClient> client = serviceLookup.getAPIGatewayClient();
         if (client.isPresent()) {
-            client.get().post(EBIKE_QUERY_PATH)
+            client.get().get(EBIKE_QUERY_PATH)
                     .sendJson(requestPayload, ar -> {
                         if (ar.succeeded()) {
                             JsonObject res = ar.result().bodyAsJsonObject();
-                            if (res.containsKey(RESULT)) {
-                                var resList = res.getJsonArray(RESULT);
-                                var it = resList.stream().iterator();
+                            if (res.containsKey(E_BIKE_ID) && res.containsKey(BATTERY) &&
+                                    res.containsKey(POSITION_X) && res.containsKey(POSITION_Y) &&
+                                    res.containsKey("status")) {
                                 var resBike = new EBikeImpl();
-                                if (it.hasNext()) {
-                                    var jsonObj = (JsonObject) it.next();
-                                    int resId = Integer.parseInt(jsonObj.getString(E_BIKE_ID));
-                                    resBike.setId(resId);
-                                    resBike.setBattery(jsonObj.getInteger(BATTERY));
-                                    resBike.setPositionX(jsonObj.getInteger(POSITION_X));
-                                    resBike.setPositionY(jsonObj.getInteger(POSITION_Y));
-                                    resBike.setState(jsonObj.getString("status"));
-                                }
+                                int resId = Integer.parseInt(res.getString(E_BIKE_ID));
+                                resBike.setId(resId);
+                                resBike.setBattery(Integer.parseInt(res.getString(BATTERY)));
+                                resBike.setPositionX(Integer.parseInt(res.getString(POSITION_X)));
+                                resBike.setPositionY(Integer.parseInt(res.getString(POSITION_Y)));
+                                resBike.setState(res.getString("status"));
                                 promise.complete(resBike);
                             }
                         } else {
                             LOGGER.severe(ar.cause().getMessage());
+                            promise.fail(ar.cause());
                         }
                     });
         } else {
@@ -389,17 +360,15 @@ public class WebController extends AbstractVerticle implements ResourceRequest {
 
     @Override
     public void spreadUserChange(User user) {
-        ITopic<String> topic = hazelcastInstance.getTopic("UserChangedFromRideService");
         JsonObject busPayload = new JsonObject();
         busPayload.put(USER_ID, user.id());
         busPayload.put(CREDIT, user.credit());
 
-        topic.publish(busPayload.toString());
+        vertx.eventBus().publish("UserChangedFromRideService", busPayload.toString());
     }
 
     @Override
     public void spreadEBikeChange(EBike bike) {
-        ITopic<String> topic = hazelcastInstance.getTopic("BikeChangedFromRideService");
         JsonObject busPayload = new JsonObject();
         busPayload.put(E_BIKE_ID, bike.id());
         busPayload.put(POSITION_X, bike.positionX());
@@ -407,7 +376,7 @@ public class WebController extends AbstractVerticle implements ResourceRequest {
         busPayload.put("status", bike.state());
         busPayload.put(BATTERY, bike.battery());
 
-        topic.publish(busPayload.toString());
+        vertx.eventBus().publish("BikeChangedFromRideService", busPayload.toString());
     }
 
     @Override
