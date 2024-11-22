@@ -3,6 +3,8 @@ package sap.ass02.apigateway;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.ListenerConfig;
 import com.hazelcast.config.MemberAttributeConfig;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
@@ -41,6 +43,7 @@ public class ApiGateway extends AbstractVerticle {
     private final int port;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
     private Vertx vertx;
+    private HazelcastClusterManager clusterManager;
 
     public ApiGateway() {
         this.port = 8085;
@@ -54,7 +57,7 @@ public class ApiGateway extends AbstractVerticle {
         attributes.put("SERVICE_PORT","8085");
         hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
         hazelcastConfig.addListenerConfig(new ListenerConfig(new ClusterMembershipListenerImpl(this.serviceLookup)));
-        HazelcastClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
+        clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
         VertxOptions vOptions = new VertxOptions().setClusterManager(clusterManager);
 
@@ -90,6 +93,12 @@ public class ApiGateway extends AbstractVerticle {
         if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.log(Level.INFO, "EBikeCesena Api Gateway ready on port: " + port);
         }
+
+        HazelcastInstance hz = clusterManager.getHazelcastInstance();
+
+        // Get the distributed map (IMap) associated with this Hazelcast instance
+        IMap<String, String> map = hz.getMap("configurations");
+        map.addEntryListener(new ClusterEntryListener(), true);
 
         vertx.eventBus().consumer("UserChangedFromUserService", msg -> {
             JsonObject json = new JsonObject(msg.body().toString());

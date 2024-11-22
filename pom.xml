@@ -16,6 +16,7 @@
         <module>client</module>
         <module>user-service</module>
         <module>ride-service</module>
+        <module>configuration-server</module>
     </modules>
 
     <properties>
