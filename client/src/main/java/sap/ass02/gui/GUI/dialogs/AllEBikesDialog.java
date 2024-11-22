@@ -152,7 +152,7 @@ public class AllEBikesDialog extends JDialog {
     private JButton getRechargeButton(JPanel listPanel, int key, Triple<Pair<Integer, Integer>, Integer, String> value) {
         JButton rechargeButton = new JButton("Recharge");
 
-        rechargeButton.addActionListener(e -> this.app.requestUpdateEBike(key, 100, value.third(), value.first().first(), value.first().second()).onComplete(x -> {
+        rechargeButton.addActionListener(e -> this.app.requestUpdateEBike(key, 100, "AVAILABLE", value.first().first(), value.first().second()).onComplete(x -> {
             if (x.result()) {
                 showNonBlockingMessage("Successfully recharged bike", "Success", JOptionPane.INFORMATION_MESSAGE);
                 refreshList(listPanel);
