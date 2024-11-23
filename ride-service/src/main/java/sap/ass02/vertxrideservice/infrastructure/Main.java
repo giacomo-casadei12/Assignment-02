@@ -5,7 +5,6 @@ import com.hazelcast.config.ListenerConfig;
 import com.hazelcast.config.MemberAttributeConfig;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
-import io.vertx.core.spi.cluster.ClusterManager;
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
 import sap.ass02.vertxrideservice.ClusterMembershipListenerImpl;
 import sap.ass02.vertxrideservice.ServiceLookup;
@@ -42,7 +41,7 @@ public class Main {
         attributes.put("SERVICE_PORT","8080");
         hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
         hazelcastConfig.addListenerConfig(new ListenerConfig(new ClusterMembershipListenerImpl(serviceLookup)));
-        ClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
+        HazelcastClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
         // Create VertxOptions with the Hazelcast Cluster Manager
         VertxOptions options = new VertxOptions().setClusterManager(clusterManager);
@@ -51,6 +50,7 @@ public class Main {
             if (cluster.succeeded()) {
                 vs.setVertx(cluster.result());
                 serviceLookup.setVertxInstance(vs.getVertx());
+                wc.attachClusterManager(clusterManager);
                 vs.getVertx().deployVerticle(wc);
                 vs.getVertx().deployVerticle(am);
                 vs.getVertx().deployVerticle(rp);

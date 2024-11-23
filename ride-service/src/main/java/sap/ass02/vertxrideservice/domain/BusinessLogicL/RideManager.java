@@ -51,4 +51,5 @@ public interface RideManager {
      */
     void attachNotificationService(NotificationService notificationService);
 
+    void updateConfigurations(double batteryConsumption, double creditConsumption);
 }

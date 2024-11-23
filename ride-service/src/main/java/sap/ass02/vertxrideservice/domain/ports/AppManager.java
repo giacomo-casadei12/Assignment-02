@@ -97,6 +97,13 @@ public class AppManager extends AbstractVerticle implements NotificationService 
                     3, 0, 0);
         });
 
+        eventBus.consumer("RideServiceUpdateConfigurations", msg -> {
+            JsonObject json = new JsonObject(msg.body().toString());
+            double batteryConsumption = Double.parseDouble(json.getString("BATTERY_CONSUMPTION_PER_METER"));
+            double creditConsumption = Double.parseDouble(json.getString("CREDIT_CONSUMPTION_PER_SECOND"));
+            this.rideManager.updateConfigurations(batteryConsumption,creditConsumption);
+        });
+
         LOGGER.log(Level.INFO, "App manager ready to process messages");
     }
 

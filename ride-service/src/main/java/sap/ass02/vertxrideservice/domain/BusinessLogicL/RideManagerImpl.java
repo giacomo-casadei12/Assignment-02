@@ -13,8 +13,8 @@ import java.util.Objects;
  */
 public class RideManagerImpl implements RideManager {
 
-    final private static double BATTERY_CONSUMPTION_PER_METER = 0.5;
-    final private static double CREDIT_CONSUMPTION_PER_SECOND = 1;
+    private double BATTERY_CONSUMPTION_PER_METER = 0.5;
+    private double CREDIT_CONSUMPTION_PER_SECOND = 1;
     private NotificationService notificationService;
 
     @Override
@@ -80,6 +80,12 @@ public class RideManagerImpl implements RideManager {
     @Override
     public void attachNotificationService(NotificationService notificationService) {
         this.notificationService = notificationService;
+    }
+
+    @Override
+    public void updateConfigurations(double batteryConsumption, double creditConsumption) {
+        this.BATTERY_CONSUMPTION_PER_METER = batteryConsumption;
+        this.CREDIT_CONSUMPTION_PER_SECOND = creditConsumption;
     }
 
     private void updatedBattery(EBike bike, int positionX, int positionY) {

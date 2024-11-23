@@ -9,6 +9,7 @@ import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
+import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.spi.cluster.ClusterManager;
 import io.vertx.ext.web.Router;
@@ -17,10 +18,14 @@ import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
 
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static sap.ass02.configurationserver.utils.JsonFieldsConstants.RESULT;
 
 
 /**
@@ -32,7 +37,9 @@ public class WebController extends AbstractVerticle implements ConfigurationShar
     private final int port;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
     private final ClusterManager clusterManager;
-    private IMap<String, String> map;
+    private IMap<String, String> distributedMap;
+    private final Map<String, String> configurationMap = new ConcurrentHashMap<>();
+
     /**
      * The Vertx.
      */
@@ -59,9 +66,7 @@ public class WebController extends AbstractVerticle implements ConfigurationShar
             if (cluster.succeeded()) {
                 vertx = cluster.result();
                 HazelcastInstance hz = ((HazelcastClusterManager) clusterManager).getHazelcastInstance();
-
-                map = hz.getMap("configurations");
-                map.addEntryListener(new ClusterEntryListener(), true);
+                distributedMap = hz.getMap("configurations");
                 cfo.start(this);
                 vertx.deployVerticle(this);
             } else {
@@ -78,8 +83,7 @@ public class WebController extends AbstractVerticle implements ConfigurationShar
         router.route("/static/*").handler(StaticHandler.create().setCachingEnabled(false));
         router.route().handler(BodyHandler.create());
 
-        router.route(HttpMethod.POST, "/api/user/command").handler(this::processServiceUserCmd);
-        router.route(HttpMethod.GET, "/api/user/query").handler(this::processServiceUserQuery);
+        router.route(HttpMethod.GET, "/api/configuration/query").handler(this::processServiceConfigurationQuery);
 
         server.requestHandler(router).listen(port);
 
@@ -89,50 +93,53 @@ public class WebController extends AbstractVerticle implements ConfigurationShar
 
     }
 
-    /*
-    // Add an entry to the map (this will trigger the EntryListener)
-        JsonObject jsonObject = new JsonObject();
-        jsonObject.put("name", "John Doe");
-        jsonObject.put("age", 30);
-
-        map.put("user", jsonObject.toString());
-
-        // Retrieve the entry from the map
-        String retrieved = map.get("user");
-        System.out.println("Retrieved data: " + retrieved);
-     */
-
-    /**
-     * Process a request that will need to WRITE
-     * the user persistence system.
-     *
-     * @param context the RoutingContext
-     */
-    protected void processServiceUserCmd(RoutingContext context) {
-
-    }
-
     /**
      * Process a request that will need to READ
-     * the user persistence system.
+     * from the configuration server.
      *
      * @param context the RoutingContext
      */
-    protected void processServiceUserQuery(RoutingContext context) {
-
+    protected void processServiceConfigurationQuery(RoutingContext context) {
+        if (LOGGER.isLoggable(Level.FINE)) {
+            LOGGER.log(Level.INFO, "New request - configuration get " + context.currentRoute().getPath());
+        }
+        JsonObject requestBody = context.body().asJsonObject();
+        if (requestBody.containsKey("requestedConfig")) {
+            String reqConfig = requestBody.getString("requestedConfig");
+            JsonObject reply = new JsonObject();
+            if (configurationMap.containsKey(reqConfig)) {
+                reply = new JsonObject(configurationMap.get(reqConfig));
+            } else {
+                reply.put("Error", "Configuration not found");
+            }
+            HttpServerResponse response = context.response();
+            response.putHeader("content-type", "application/json");
+            response.end(reply.toString());
+        } else {
+            invalidJSONReply(context,requestBody);
+        }
     }
 
     @Override
     public void addConfiguration(String configurationName, String configurationFile) {
-        map.put(configurationName, configurationFile);
+        distributedMap.put(configurationName, new Date().toString());
+        configurationMap.put(configurationName.split("\\.")[0], configurationFile);
         System.out.println("Added configuration: " + configurationName);
-        System.out.println("Added configuration file: " + new JsonObject(map.get(configurationName)).encodePrettily());
     }
 
     @Override
     public void updateConfiguration(String configurationName, String configurationFile) {
-        map.put(configurationName, configurationFile);
+        distributedMap.put(configurationName, new Date().toString());
+        configurationMap.put(configurationName.split("\\.")[0], configurationFile);
         System.out.println("Changed configuration: " + configurationName);
-        System.out.println("Changed configuration file: " + new JsonObject(map.get(configurationName)).encodePrettily());
+    }
+
+    private void invalidJSONReply(RoutingContext context, JsonObject requestBody) {
+        LOGGER.warning("Received invalid JSON payload: " + requestBody);
+        JsonObject reply = new JsonObject();
+        reply.put(RESULT, "not ok");
+        HttpServerResponse response = context.response();
+        response.putHeader("content-type", "application/json");
+        response.end(reply.toString());
     }
 }

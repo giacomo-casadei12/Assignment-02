@@ -15,6 +15,9 @@ public class ServiceLookupImpl implements ServiceLookup {
     private int api_gateway_server_port = 0;
     private Vertx vertx;
     private WebClient apiGatewayClient;
+    private String configuration_server_host = "";
+    private int configuration_server_port = 0;
+    private WebClient configurationServerClient;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
 
     @Override
@@ -24,6 +27,11 @@ public class ServiceLookupImpl implements ServiceLookup {
             WebClientOptions options = new WebClientOptions().setDefaultHost(api_gateway_server_host).setDefaultPort(api_gateway_server_port);
             apiGatewayClient = WebClient.create(vertx, options);
             LOGGER.log(Level.INFO, "apiGatewayService registered ");
+        }
+        if (configuration_server_port != 0 && !configuration_server_host.isBlank() && Objects.isNull(configurationServerClient)) {
+            WebClientOptions options = new WebClientOptions().setDefaultHost(configuration_server_host).setDefaultPort(configuration_server_port);
+            configurationServerClient = WebClient.create(vertx, options);
+            LOGGER.log(Level.INFO, "Configuration Server registered ");
         }
     }
 
@@ -39,7 +47,7 @@ public class ServiceLookupImpl implements ServiceLookup {
         if (Objects.isNull(apiGatewayClient) && !Objects.isNull(vertx)) {
             WebClientOptions options = new WebClientOptions().setDefaultHost(api_gateway_server_host).setDefaultPort(api_gateway_server_port);
             apiGatewayClient = WebClient.create(vertx, options);
-            LOGGER.log(Level.INFO, "BikeService registered ");
+            LOGGER.log(Level.INFO, "APIGateway registered ");
         }
     }
 
@@ -53,6 +61,34 @@ public class ServiceLookupImpl implements ServiceLookup {
     @Override
     public Optional<WebClient> getAPIGatewayClient() {
         return Objects.isNull(apiGatewayClient) ? Optional.empty() : Optional.of(apiGatewayClient);
+    }
+
+    @Override
+    public boolean isConfigurationServerConnected() {
+        return !(configuration_server_host.isBlank() && configuration_server_port == 0 && Objects.isNull(configurationServerClient));
+    }
+
+    @Override
+    public void plugConfigurationServer(String host, int port) {
+        configuration_server_port = port;
+        configuration_server_host = host;
+        if (Objects.isNull(configurationServerClient) && !Objects.isNull(vertx)) {
+            WebClientOptions options = new WebClientOptions().setDefaultHost(configuration_server_host).setDefaultPort(configuration_server_port);
+            configurationServerClient = WebClient.create(vertx, options);
+            LOGGER.log(Level.INFO, "Configuration Server registered ");
+        }
+    }
+
+    @Override
+    public void unplugConfigurationServer() {
+        configuration_server_port = 0;
+        configuration_server_host = "";
+        configurationServerClient = null;
+    }
+
+    @Override
+    public Optional<WebClient> getConfigurationServerClient() {
+        return Objects.isNull(configurationServerClient) ? Optional.empty() : Optional.of(configurationServerClient);
     }
 
 }

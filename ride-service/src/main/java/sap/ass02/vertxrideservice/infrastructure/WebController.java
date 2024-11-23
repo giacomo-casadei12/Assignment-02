@@ -1,5 +1,7 @@
 package sap.ass02.vertxrideservice.infrastructure;
 
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
 import io.vertx.core.*;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.http.HttpMethod;
@@ -11,6 +13,7 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
+import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
 import sap.ass02.vertxrideservice.ServiceLookup;
 import sap.ass02.vertxrideservice.utils.VertxSingleton;
 import sap.ass02.vertxrideservice.utils.WebOperation;
@@ -32,6 +35,7 @@ public class WebController extends AbstractVerticle {
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena RideService WebController]");
     private static final String EBIKE_QUERY_PATH = "/api/ebike/query";
     private static final String USER_QUERY_PATH = "/api/user/query";
+    private static final String CONFIGURATION_QUERY_PATH = "/api/configuration/query";
     private final Map<Integer, RoutingContext> routingContexts = new ConcurrentHashMap<>();
     private int requestCounter = 1;
     /**
@@ -40,6 +44,7 @@ public class WebController extends AbstractVerticle {
     Vertx vertx;
     final ServiceLookup serviceLookup;
     EventBus eventBus;
+    private HazelcastClusterManager clusterManager;
 
     /**
      * Instantiates a new Web controller.
@@ -48,6 +53,10 @@ public class WebController extends AbstractVerticle {
         this.port = 8080;
         LOGGER.setLevel(Level.FINE);
         this.serviceLookup = serviceLookup;
+    }
+
+    public void attachClusterManager(HazelcastClusterManager clusterManager) {
+        this.clusterManager = clusterManager;
     }
 
     @Override
@@ -64,11 +73,16 @@ public class WebController extends AbstractVerticle {
 
         server.requestHandler(router).listen(port);
 
-        //if (LOGGER.isLoggable(Level.FINE)) {
+        if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.log(Level.INFO, "EBikeCesena RideService web server ready on port: " + port);
-        //}
+        }
+
+        HazelcastInstance hz = clusterManager.getHazelcastInstance();
 
         this.eventBus = vertx.eventBus();
+
+        IMap<String, String> map = hz.getMap("configurations");
+        map.addEntryListener(new ClusterEntryListener(this.eventBus), true);
 
         eventBus.consumer("RideWebControllerSendResponse", msg -> {
             JsonObject json = new JsonObject(msg.body().toString());
@@ -102,6 +116,41 @@ public class WebController extends AbstractVerticle {
 
             vertx.eventBus().publish("UserChangedFromRideService", json.toString());
         });
+
+        eventBus.consumer("RideWebControllerSpreadUserChange", msg -> {
+            JsonObject json = new JsonObject(msg.body().toString());
+
+            vertx.eventBus().publish("UserChangedFromRideService", json.toString());
+        });
+
+        eventBus.consumer("RideWebControllerConfigurationsChanged", msg -> this.getConfiguration());
+
+        this.getConfiguration();
+    }
+
+    private void getConfiguration() {
+        JsonObject requestPayload = new JsonObject();
+        requestPayload.put("requestedConfig", "rideService");
+
+        Optional<WebClient> client = serviceLookup.getConfigurationServerClient();
+        if (client.isPresent()) {
+            client.get().get(CONFIGURATION_QUERY_PATH)
+                    .sendJson(requestPayload, ar -> {
+                        if (ar.succeeded()) {
+                            if (!ar.result().bodyAsJsonObject().containsKey("Error")) {
+                                JsonObject res = ar.result().bodyAsJsonObject();
+                                eventBus.publish("RideServiceUpdateConfigurations", res);
+                            } else {
+                                LOGGER.severe(ar.result().bodyAsJsonObject().getString("Error"));
+                            }
+                        } else {
+                            LOGGER.severe(ar.cause().getMessage());
+                        }
+                    });
+        } else {
+            System.out.println("EBikeCesena Api Configuration Server not found");
+        }
+
     }
 
     /**
@@ -117,7 +166,6 @@ public class WebController extends AbstractVerticle {
         int requestId = requestCounter;
         requestCounter++;
         this.routingContexts.put(requestId, context);
-        // Parse the JSON body
         JsonObject requestBody = context.body().asJsonObject();
         if (requestBody != null && requestBody.containsKey(OPERATION)) {
             WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];

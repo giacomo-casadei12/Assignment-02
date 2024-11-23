@@ -25,6 +25,12 @@ public class ClusterMembershipListenerImpl implements ClusterMembershipListener 
                             Integer.parseInt(member.getAttribute("SERVICE_PORT")));
                 }
             }
+            if (serviceName.equals("ConfigurationServer")) {
+                if (!serviceLookup.isConfigurationServerConnected()) {
+                    serviceLookup.plugConfigurationServer(member.getAttribute("SERVICE_ADDRESS"),
+                            Integer.parseInt(member.getAttribute("SERVICE_PORT")));
+                }
+            }
         }
     }
 
@@ -36,6 +42,11 @@ public class ClusterMembershipListenerImpl implements ClusterMembershipListener 
             if (serviceName.equals("ApiGateway")) {
                 if (serviceLookup.isAPIGatewayServiceConnected()) {
                     serviceLookup.unplugAPIGatewayService();
+                }
+            }
+            if (serviceName.equals("ConfigurationServer")) {
+                if (serviceLookup.isConfigurationServerConnected()) {
+                    serviceLookup.unplugConfigurationServer();
                 }
             }
         }

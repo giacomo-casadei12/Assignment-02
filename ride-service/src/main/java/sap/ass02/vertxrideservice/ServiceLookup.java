@@ -14,4 +14,9 @@ public interface ServiceLookup {
     void unplugAPIGatewayService();
     Optional<WebClient> getAPIGatewayClient();
 
+    boolean isConfigurationServerConnected();
+    void plugConfigurationServer(String host, int port);
+    void unplugConfigurationServer();
+    Optional<WebClient> getConfigurationServerClient();
+
 }
