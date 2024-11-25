@@ -10,6 +10,7 @@ import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
@@ -32,6 +33,7 @@ public class ApiGateway extends AbstractVerticle {
     private static final String EBIKE_QUERY_PATH = "/api/ebike/query";
     private static final String RIDE_COMMAND_PATH = "/api/ride/command";
     private static final String RIDE_QUERY_PATH = "/api/ride/query";
+    private static final String HEALTH_CHECK_PATH = "/healthCheck";
 
     private static final String BIKE_CHANGE_EVENT_TOPIC = "ebike-Change";
     private static final String USER_CHANGE_EVENT_TOPIC = "users-Change";
@@ -89,6 +91,8 @@ public class ApiGateway extends AbstractVerticle {
         router.route(HttpMethod.GET, USER_QUERY_PATH).handler(this::processServiceUserQuery);
         router.route(HttpMethod.POST, RIDE_COMMAND_PATH).handler(this::processServiceRideCmd);
         router.route(HttpMethod.GET, RIDE_QUERY_PATH).handler(this::processServiceRideQuery);
+
+        router.route(HttpMethod.GET, HEALTH_CHECK_PATH).handler(this::healthCheckHandler);
 
         server.requestHandler(router).listen(port);
 
@@ -218,6 +222,15 @@ public class ApiGateway extends AbstractVerticle {
         } else {
             System.out.println("EBikeCesena Api Gateway client not found");
         }
+    }
+
+    protected void healthCheckHandler(RoutingContext context) {
+        LOGGER.log(Level.INFO, "Health check request " + context.currentRoute().getPath());
+        JsonObject reply = new JsonObject();
+        reply.put("status", "UP");
+        JsonArray checks = new JsonArray();
+        reply.put("checks", checks);
+        sendReply(context, reply);
     }
 
     private void sendReply(RoutingContext request, JsonObject reply) {

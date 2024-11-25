@@ -7,6 +7,7 @@ import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
@@ -36,6 +37,8 @@ public class WebController extends AbstractVerticle {
     private static final String EBIKE_QUERY_PATH = "/api/ebike/query";
     private static final String USER_QUERY_PATH = "/api/user/query";
     private static final String CONFIGURATION_QUERY_PATH = "/api/configuration/query";
+    private static final String HEALTH_CHECK_PATH = "/healthCheck";
+
     private final Map<Integer, RoutingContext> routingContexts = new ConcurrentHashMap<>();
     private int requestCounter = 1;
     /**
@@ -70,6 +73,8 @@ public class WebController extends AbstractVerticle {
 
         router.route(HttpMethod.POST, "/api/ride/command").handler(this::processServiceRideCmd);
         router.route(HttpMethod.GET, "/api/ride/query").handler(this::processServiceRideQuery);
+
+        router.route(HttpMethod.GET, HEALTH_CHECK_PATH).handler(this::healthCheckHandler);
 
         server.requestHandler(router).listen(port);
 
@@ -123,7 +128,7 @@ public class WebController extends AbstractVerticle {
             vertx.eventBus().publish("UserChangedFromRideService", json.toString());
         });
 
-        eventBus.consumer("RideWebControllerConfigurationsChanged", msg -> this.getConfiguration());
+        eventBus.consumer("RideWebControllerConfigurationsChanged", _ -> this.getConfiguration());
 
         this.getConfiguration();
     }
@@ -307,6 +312,24 @@ public class WebController extends AbstractVerticle {
         } else {
             invalidJSONReply(context,requestBody);
         }
+    }
+
+    protected void healthCheckHandler(RoutingContext context) {
+        LOGGER.log(Level.INFO, "Health check request " + context.currentRoute().getPath());
+        JsonObject reply = new JsonObject();
+        reply.put("status", "UP");
+        JsonArray checks = new JsonArray();
+
+        eventBus.consumer("RideServiceHealthCheck", _ -> {
+            //check eventbus liveness
+            checks.add(true);
+            reply.put("checks", checks);
+            HttpServerResponse response = context.response();
+            response.putHeader("content-type", "application/json");
+            response.end(reply.toString());
+        });
+
+        eventBus.publish("RideServiceHealthCheck", reply.toString());
     }
 
     private void invalidJSONReply(RoutingContext context, JsonObject requestBody) {

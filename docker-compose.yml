@@ -4,33 +4,54 @@ services:
   ride-service:
     image: ride-service
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_healthy
     networks:
       - ebike-network
     ports:
       - "8080:8080"
     expose:
       - 8080
+    healthcheck:
+      test: curl --fail http://ride-service:8080/healthCheck || exit 1
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   user-service:
     image: user-service
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_healthy
     networks:
       - ebike-network
     ports:
       - "8081:8081"
     expose: 
       - 8081
+    healthcheck:
+      test: curl --fail http://user-service:8081/healthCheck || exit 1
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   bike-service:
     image: bike-service
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_healthy
     networks:
       - ebike-network
     ports:
       - "8082:8082"
     expose:
       - 8082
+    healthcheck:
+      test: curl --fail http://bike-service:8082/healthCheck || exit 1
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   api-gateway:
     image: api-gateway
     networks:
@@ -40,10 +61,17 @@ services:
       - "8085:8085"
     expose: 
       - 8085
+    healthcheck:
+      test: curl --fail http://api-gateway:8085/healthCheck || exit 1
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   configuration-server:
     image: configuration-server
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_healthy
     networks:
       - ebike-network
     ports:
@@ -52,6 +80,12 @@ services:
       - 8090
     volumes:
       - C:/UNI/Configurations:/Configurations
+    healthcheck:
+      test: curl --fail http://configuration-server:8090/healthCheck || exit 1
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 networks:
   ebike-network:
     driver: bridge

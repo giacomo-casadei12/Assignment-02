@@ -10,6 +10,7 @@ import io.vertx.core.VertxOptions;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.spi.cluster.ClusterManager;
 import io.vertx.ext.web.Router;
@@ -36,6 +37,8 @@ public class WebController extends AbstractVerticle implements ConfigurationShar
 
     private final int port;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
+    private static final String HEALTH_CHECK_PATH = "/healthCheck";
+
     private final ClusterManager clusterManager;
     private IMap<String, String> distributedMap;
     private final Map<String, String> configurationMap = new ConcurrentHashMap<>();
@@ -86,6 +89,8 @@ public class WebController extends AbstractVerticle implements ConfigurationShar
 
         router.route(HttpMethod.GET, "/api/configuration/query").handler(this::processServiceConfigurationQuery);
 
+        router.route(HttpMethod.GET, HEALTH_CHECK_PATH).handler(this::healthCheckHandler);
+
         server.requestHandler(router).listen(port);
 
         if (LOGGER.isLoggable(Level.FINE)) {
@@ -119,6 +124,19 @@ public class WebController extends AbstractVerticle implements ConfigurationShar
         } else {
             invalidJSONReply(context,requestBody);
         }
+    }
+
+    protected void healthCheckHandler(RoutingContext context) {
+        LOGGER.log(Level.INFO, "Health check request " + context.currentRoute().getPath());
+        JsonObject reply = new JsonObject();
+        reply.put("status", "UP");
+        JsonArray checks = new JsonArray();
+        //check if the configurations are present
+        checks.add(!configurationMap.isEmpty());
+        reply.put("checks", checks);
+        HttpServerResponse response = context.response();
+        response.putHeader("content-type", "application/json");
+        response.end(reply.toString());
     }
 
     @Override

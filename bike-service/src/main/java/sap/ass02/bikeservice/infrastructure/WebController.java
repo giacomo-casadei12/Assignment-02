@@ -36,6 +36,8 @@ public class WebController extends AbstractVerticle {
 
     private final int port;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
+    private static final String HEALTH_CHECK_PATH = "/healthCheck";
+
     /**
      * The Vertx.
      */
@@ -82,6 +84,8 @@ public class WebController extends AbstractVerticle {
 
         router.route(HttpMethod.POST, "/api/ebike/command").handler(this::processServiceEBikeCmd);
         router.route(HttpMethod.GET, "/api/ebike/query").handler(this::processServiceEBikeQuery);
+
+        router.route(HttpMethod.GET, HEALTH_CHECK_PATH).handler(this::healthCheckHandler);
 
         server.requestHandler(router).listen(port);
 
@@ -218,6 +222,17 @@ public class WebController extends AbstractVerticle {
                 invalidJSONReply(context,requestBody);
             }
         }).start();
+    }
+
+    protected void healthCheckHandler(RoutingContext context) {
+        LOGGER.log(Level.INFO, "Health check request " + context.currentRoute().getPath());
+        JsonObject reply = new JsonObject();
+        reply.put("status", "UP");
+        JsonArray checks = new JsonArray();
+        //check connection to db
+        checks.add(Objects.nonNull(pManager.getAllEBikes(0,0,false)));
+        reply.put("checks", checks);
+        sendReply(context, reply);
     }
 
     private void checkResponseAndSendReply(RoutingContext context, boolean b) {

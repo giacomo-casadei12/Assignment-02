@@ -36,6 +36,8 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
 
     private final int port;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
+    private static final String HEALTH_CHECK_PATH = "/healthCheck";
+
     /**
      * The Vertx.
      */
@@ -82,6 +84,8 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
 
         router.route(HttpMethod.POST, "/api/user/command").handler(this::processServiceUserCmd);
         router.route(HttpMethod.GET, "/api/user/query").handler(this::processServiceUserQuery);
+
+        router.route(HttpMethod.GET, HEALTH_CHECK_PATH).handler(this::healthCheckHandler);
 
         server.requestHandler(router).listen(port);
 
@@ -210,6 +214,17 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
                 invalidJSONReply(context,requestBody);
             }
         }).start();
+    }
+
+    protected void healthCheckHandler(RoutingContext context) {
+        LOGGER.log(Level.INFO, "Health check request " + context.currentRoute().getPath());
+        JsonObject reply = new JsonObject();
+        reply.put("status", "UP");
+        JsonArray checks = new JsonArray();
+        //check connection to db
+        checks.add(Objects.nonNull(pManager.getAllUsers()));
+        reply.put("checks", checks);
+        sendReply(context, reply);
     }
 
     private void checkResponseAndSendReply(RoutingContext context, boolean b) {
