@@ -27,7 +27,7 @@ public class ClusterMembershipListenerImpl implements ClusterMembershipListener 
                     }
                     break;
                 case "UserService":
-                    System.out.println("pipo");
+                    System.out.println(member.getAttribute("SERVICE_ADDRESS"));
                     if (!serviceLookup.isUserServiceConnected()) {
                         serviceLookup.plugUserService(member.getAttribute("SERVICE_ADDRESS"),
                                 Integer.parseInt(member.getAttribute("SERVICE_PORT")));

@@ -5,7 +5,7 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import sap.ass02.rideservice.utils.JsonFieldsConstants;
+import sap.ass02.vertxrideservice.utils.JsonFieldsConstants;
 import sap.ass02.vertxrideservice.utils.VertxSingleton;
 
 import java.sql.*;
@@ -38,7 +38,7 @@ public class RidePersistence extends AbstractVerticle {
         ds = new MysqlDataSource();
         ds.setUser("root");
         ds.setPassword("d3fR3@dy!");
-        ds.setURL("jdbc:mysql://localhost:3307/ebcesena2rides");
+        ds.setURL("jdbc:mysql://host.docker.internal:3307/ebcesena2rides");
         format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss") ;
     }
 

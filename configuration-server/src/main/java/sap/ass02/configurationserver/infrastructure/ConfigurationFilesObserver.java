@@ -13,7 +13,7 @@ public class ConfigurationFilesObserver {
     public void start(ConfigurationSharer cs) {
         new Thread(() -> {
             this.sharer = cs;
-            Path dir = Paths.get("C:/UNI/Configurations");
+            Path dir = Paths.get("/Configurations");
 
             try {
                 System.out.println("Reading existing files in the directory:");

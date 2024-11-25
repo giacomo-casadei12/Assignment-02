@@ -55,9 +55,10 @@ public class WebController extends AbstractVerticle implements ConfigurationShar
         hazelcastConfig.setClusterName("EBikeCesena");
         Map<String, String> attributes = new HashMap<>();
         attributes.put("SERVICE_NAME","ConfigurationServer");
-        attributes.put("SERVICE_ADDRESS","localhost");
+        attributes.put("SERVICE_ADDRESS","configuration-server");
         attributes.put("SERVICE_PORT","8090");
         hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
+        hazelcastConfig.getNetworkConfig().setPort(5701).getJoin().getTcpIpConfig().setEnabled(true).addMember("api-gateway:5701");
         clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
         VertxOptions options = new VertxOptions().setClusterManager(clusterManager);

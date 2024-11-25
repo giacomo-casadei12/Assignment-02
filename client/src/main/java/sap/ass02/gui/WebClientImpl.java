@@ -43,6 +43,9 @@ public class WebClientImpl implements WebClient {
     public WebClientImpl() {
         Config hazelcastConfig = new Config();
         hazelcastConfig.setClusterName("EBikeCesena");
+
+        hazelcastConfig.getNetworkConfig().setPort(5701).getJoin().getTcpIpConfig().setEnabled(true).addMember("192.168.1.79:5701");
+
         ClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
         Map<String, String> attributes = new HashMap<>();
         attributes.put("SERVICE_NAME","Client");

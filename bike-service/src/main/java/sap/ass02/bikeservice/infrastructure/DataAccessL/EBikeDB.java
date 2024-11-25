@@ -30,7 +30,7 @@ public class EBikeDB implements EBikeDA {
         ds = new MysqlDataSource();
         ds.setUser("root");
         ds.setPassword("d3fR3@dy!");
-        ds.setURL("jdbc:mysql://localhost:3307/ebcesena2bikes");
+        ds.setURL("jdbc:mysql://host.docker.internal:3307/ebcesena2bikes");
     }
 
     @Override

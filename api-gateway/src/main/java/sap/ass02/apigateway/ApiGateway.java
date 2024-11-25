@@ -50,10 +50,15 @@ public class ApiGateway extends AbstractVerticle {
         hazelcastConfig.setClusterName("EBikeCesena");
         Map<String, String> attributes = new HashMap<>();
         attributes.put("SERVICE_NAME","ApiGateway");
-        attributes.put("SERVICE_ADDRESS","localhost");
+        attributes.put("SERVICE_ADDRESS","api-gateway");
         attributes.put("SERVICE_PORT","8085");
         hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
         hazelcastConfig.addListenerConfig(new ListenerConfig(new ClusterMembershipListenerImpl(this.serviceLookup)));
+
+        hazelcastConfig.getNetworkConfig().setPort(5701).getJoin().getTcpIpConfig().setEnabled(true)
+                .addMember("192.168.1.79:5701")
+                .addMember("api-gateway:5701");
+
         HazelcastClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
         VertxOptions vOptions = new VertxOptions().setClusterManager(clusterManager);

@@ -36,7 +36,6 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
 
     private final int port;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
-    private static final String USER_CHANGE_EVENT_TOPIC = "users-Change";
     /**
      * The Vertx.
      */
@@ -54,9 +53,10 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
         hazelcastConfig.setClusterName("EBikeCesena");
         Map<String, String> attributes = new HashMap<>();
         attributes.put("SERVICE_NAME","UserService");
-        attributes.put("SERVICE_ADDRESS","localhost");
+        attributes.put("SERVICE_ADDRESS","user-service");
         attributes.put("SERVICE_PORT","8081");
         hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
+        hazelcastConfig.getNetworkConfig().setPort(5701).getJoin().getTcpIpConfig().setEnabled(true).addMember("api-gateway:5701");
         ClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
         // Create VertxOptions with the Hazelcast Cluster Manager

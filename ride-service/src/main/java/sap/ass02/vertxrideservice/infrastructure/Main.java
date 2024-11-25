@@ -37,10 +37,11 @@ public class Main {
         hazelcastConfig.setClusterName("EBikeCesena");
         Map<String, String> attributes = new HashMap<>();
         attributes.put("SERVICE_NAME","RideService");
-        attributes.put("SERVICE_ADDRESS","localhost");
+        attributes.put("SERVICE_ADDRESS","ride-service");
         attributes.put("SERVICE_PORT","8080");
         hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
         hazelcastConfig.addListenerConfig(new ListenerConfig(new ClusterMembershipListenerImpl(serviceLookup)));
+        hazelcastConfig.getNetworkConfig().setPort(5701).getJoin().getTcpIpConfig().setEnabled(true).addMember("api-gateway:5701");
         HazelcastClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
         // Create VertxOptions with the Hazelcast Cluster Manager

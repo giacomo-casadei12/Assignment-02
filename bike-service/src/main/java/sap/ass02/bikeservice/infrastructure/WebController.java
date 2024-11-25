@@ -53,9 +53,10 @@ public class WebController extends AbstractVerticle {
         hazelcastConfig.setClusterName("EBikeCesena");
         Map<String, String> attributes = new HashMap<>();
         attributes.put("SERVICE_NAME","BikeService");
-        attributes.put("SERVICE_ADDRESS","localhost");
+        attributes.put("SERVICE_ADDRESS","bike-service");
         attributes.put("SERVICE_PORT","8082");
         hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
+        hazelcastConfig.getNetworkConfig().setPort(5701).getJoin().getTcpIpConfig().setEnabled(true).addMember("api-gateway:5701");
         ClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
         // Create VertxOptions with the Hazelcast Cluster Manager

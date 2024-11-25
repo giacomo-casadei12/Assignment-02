@@ -26,7 +26,7 @@ public class UserDB implements UserDA {
         ds = new MysqlDataSource();
         ds.setUser("root");
         ds.setPassword("d3fR3@dy!");
-        ds.setURL("jdbc:mysql://localhost:3307/ebcesena2");
+        ds.setURL("jdbc:mysql://host.docker.internal:3307/ebcesena2");
     }
 
     @Override
