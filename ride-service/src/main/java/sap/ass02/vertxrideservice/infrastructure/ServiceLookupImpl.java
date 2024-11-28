@@ -1,4 +1,4 @@
-package sap.ass02.vertxrideservice;
+package sap.ass02.vertxrideservice.infrastructure;
 
 import io.vertx.core.Vertx;
 import io.vertx.ext.web.client.WebClient;

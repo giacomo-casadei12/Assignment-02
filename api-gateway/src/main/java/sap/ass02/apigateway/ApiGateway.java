@@ -3,6 +3,12 @@ package sap.ass02.apigateway;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.ListenerConfig;
 import com.hazelcast.config.MemberAttributeConfig;
+import io.prometheus.metrics.core.datapoints.Timer;
+import io.prometheus.metrics.core.metrics.Counter;
+import io.prometheus.metrics.core.metrics.Gauge;
+import io.prometheus.metrics.core.metrics.Histogram;
+import io.prometheus.metrics.exporter.httpserver.HTTPServer;
+import io.prometheus.metrics.instrumentation.jvm.JvmMetrics;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
@@ -19,6 +25,7 @@ import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -39,13 +46,40 @@ public class ApiGateway extends AbstractVerticle {
     private static final String USER_CHANGE_EVENT_TOPIC = "users-Change";
 
     private final ServiceLookup serviceLookup;
+    private final Histogram request_duration_histogram;
+    private final Counter requests_counter;
 
     private final int port;
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
     private Vertx vertx;
 
     public ApiGateway() {
+
+        JvmMetrics.builder().register();
+
+        Gauge service_connected = Gauge.builder()
+                .name("service_connected")
+                .help("number of services connected to the cluster")
+                .register();
+
+        request_duration_histogram = Histogram.builder()
+                .name("http_request_duration_seconds")
+                .help("Histogram of http request durations in seconds")
+                .register();
+
+        requests_counter = Counter.builder()
+                .name("request_counter")
+                .help("counter of incoming request")
+                .register();
+
         this.port = 8085;
+        try {
+            HTTPServer.builder()
+                    .port(this.port+100)
+                    .buildAndStart();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         LOGGER.setLevel(Level.FINE);
         this.serviceLookup = new ServiceLookupImpl();
         Config hazelcastConfig = new Config();
@@ -55,7 +89,7 @@ public class ApiGateway extends AbstractVerticle {
         attributes.put("SERVICE_ADDRESS","api-gateway");
         attributes.put("SERVICE_PORT","8085");
         hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
-        hazelcastConfig.addListenerConfig(new ListenerConfig(new ClusterMembershipListenerImpl(this.serviceLookup)));
+        hazelcastConfig.addListenerConfig(new ListenerConfig(new ClusterMembershipListenerImpl(this.serviceLookup, service_connected)));
 
         hazelcastConfig.getNetworkConfig().setPort(5701).getJoin().getTcpIpConfig().setEnabled(true)
                 .addMember("192.168.1.79:5701")
@@ -129,99 +163,147 @@ public class ApiGateway extends AbstractVerticle {
     }
 
     protected void processServiceEBikeCmd(RoutingContext context) {
-        Optional<WebClient> client = serviceLookup.getBikeClient();
-        if (client.isPresent()) {
-            client.get().post(EBIKE_COMMAND_PATH)
-                    .sendJson(context.body().asJsonObject(), ar -> {
-                        if (ar.succeeded()) {
-                            sendReply(context, ar.result().bodyAsJsonObject());
-                        } else {
-                            LOGGER.severe(ar.cause().getMessage());
-                        }
-                    });
-        } else {
-            System.out.println("EBikeCesena Api Gateway client not found");
-        }
+        requests_counter.inc();
+        new Thread(() -> {
+            try (Timer requestTimer = request_duration_histogram.startTimer()) {
+                Optional<WebClient> client = serviceLookup.getBikeClient();
+                if (client.isPresent()) {
+                    client.get().post(EBIKE_COMMAND_PATH)
+                            .sendJson(context.body().asJsonObject(), ar -> {
+                                if (ar.succeeded()) {
+                                    sendReply(context, ar.result().bodyAsJsonObject());
+                                } else {
+                                    LOGGER.severe(ar.cause().getMessage());
+                                    sendReply(context, ar.result().bodyAsJsonObject().put("failure", ar.cause().getMessage()));
+                                }
+                            });
+                } else {
+                    System.out.println("EBikeCesena Api Gateway bike service not connected");
+                    sendReply(context, new JsonObject().put("Error", "Missing Service"));
+                }
+                requestTimer.observeDuration();
+            }
+        }).start();
     }
 
     protected void processServiceEBikeQuery(RoutingContext context) {
-        Optional<WebClient> client = serviceLookup.getBikeClient();
-        if (client.isPresent()) {
-            client.get().get(EBIKE_QUERY_PATH)
-                    .sendJson(context.body().asJsonObject(), ar -> {
-                        if (ar.succeeded()) {
-                            sendReply(context, ar.result().bodyAsJsonObject());
-                        } else {
-                            LOGGER.severe(ar.cause().getMessage());
-                        }
-                    });
-        } else {
-            System.out.println("EBikeCesena Api Gateway client not found");
-        }
+        requests_counter.inc();
+        new Thread(() -> {
+            try (Timer requestTimer = request_duration_histogram.startTimer()) {
+                Optional<WebClient> client = serviceLookup.getBikeClient();
+                if (client.isPresent()) {
+                    client.get().get(EBIKE_QUERY_PATH)
+                            .sendJson(context.body().asJsonObject(), ar -> {
+                                if (ar.succeeded()) {
+                                    sendReply(context, ar.result().bodyAsJsonObject());
+                                } else {
+                                    LOGGER.severe(ar.cause().getMessage());
+                                    sendReply(context, ar.result().bodyAsJsonObject().put("failure", ar.cause().getMessage()));
+                                }
+                            });
+                } else {
+                    System.out.println("EBikeCesena Api Gateway bike service not connected");
+                    sendReply(context, new JsonObject().put("Error", "Missing Service"));
+                }
+                requestTimer.observeDuration();
+            }
+        }).start();
     }
 
     protected void processServiceRideCmd(RoutingContext context) {
-        Optional<WebClient> client = serviceLookup.getRideClient();
-        if (client.isPresent()) {
-            client.get().post(RIDE_COMMAND_PATH)
-                    .sendJson(context.body().asJsonObject(), ar -> {
-                        if (ar.succeeded()) {
-                            sendReply(context, ar.result().bodyAsJsonObject());
-                        } else {
-                            LOGGER.severe(ar.cause().getMessage());
-                        }
-                    });
-        } else {
-            System.out.println("EBikeCesena Api Gateway client not found");
-        }
+        requests_counter.inc();
+        new Thread(() -> {
+            try (Timer requestTimer = request_duration_histogram.startTimer()) {
+                Optional<WebClient> client = serviceLookup.getRideClient();
+                if (client.isPresent()) {
+                    client.get().post(RIDE_COMMAND_PATH)
+                            .sendJson(context.body().asJsonObject(), ar -> {
+                                if (ar.succeeded()) {
+                                    sendReply(context, ar.result().bodyAsJsonObject());
+                                } else {
+                                    LOGGER.severe(ar.cause().getMessage());
+                                    sendReply(context, ar.result().bodyAsJsonObject().put("failure", ar.cause().getMessage()));
+                                }
+                            });
+                } else {
+                    System.out.println("EBikeCesena Api Gateway ride service not connected");
+                    sendReply(context, new JsonObject().put("Error", "Missing Service"));
+                }
+                requestTimer.observeDuration();
+            }
+        }).start();
     }
 
     protected void processServiceRideQuery(RoutingContext context) {
-        Optional<WebClient> client = serviceLookup.getRideClient();
-        if (client.isPresent()) {
-            client.get().get(RIDE_QUERY_PATH)
-                    .sendJson(context.body().asJsonObject(), ar -> {
-                        if (ar.succeeded()) {
-                            sendReply(context, ar.result().bodyAsJsonObject());
-                        } else {
-                            LOGGER.severe(ar.cause().getMessage());
-                        }
-                    });
-        } else {
-            System.out.println("EBikeCesena Api Gateway client not found");
-        }
+        requests_counter.inc();
+        new Thread(() -> {
+            try (Timer requestTimer = request_duration_histogram.startTimer()) {
+                Optional<WebClient> client = serviceLookup.getRideClient();
+                if (client.isPresent()) {
+                    client.get().get(RIDE_QUERY_PATH)
+                            .sendJson(context.body().asJsonObject(), ar -> {
+                                if (ar.succeeded()) {
+                                    sendReply(context, ar.result().bodyAsJsonObject());
+                                } else {
+                                    LOGGER.severe(ar.cause().getMessage());
+                                    sendReply(context, ar.result().bodyAsJsonObject().put("failure", ar.cause().getMessage()));
+                                }
+                            });
+                } else {
+                    System.out.println("EBikeCesena Api Gateway ride service not connected");
+                    sendReply(context, new JsonObject().put("Error", "Missing Service"));
+                }
+                requestTimer.observeDuration();
+            }
+        }).start();
     }
 
     protected void processServiceUserCmd(RoutingContext context) {
-        Optional<WebClient> client = serviceLookup.getUserClient();
-        if (client.isPresent()) {
-            client.get().post(USER_COMMAND_PATH)
-                    .sendJson(context.body().asJsonObject(), ar -> {
-                        if (ar.succeeded()) {
-                            sendReply(context, ar.result().bodyAsJsonObject());
-                        } else {
-                            LOGGER.severe(ar.cause().getMessage());
-                        }
-                    });
-        } else {
-            System.out.println("EBikeCesena Api Gateway client not found");
-        }
+        requests_counter.inc();
+        new Thread(() -> {
+            try (Timer requestTimer = request_duration_histogram.startTimer()) {
+                Optional<WebClient> client = serviceLookup.getUserClient();
+                if (client.isPresent()) {
+                    client.get().post(USER_COMMAND_PATH)
+                            .sendJson(context.body().asJsonObject(), ar -> {
+                                if (ar.succeeded()) {
+                                    sendReply(context, ar.result().bodyAsJsonObject());
+                                } else {
+                                    LOGGER.severe(ar.cause().getMessage());
+                                    sendReply(context, ar.result().bodyAsJsonObject().put("failure", ar.cause().getMessage()));
+                                }
+                            });
+                } else {
+                    System.out.println("EBikeCesena Api Gateway user service not connected");
+                    sendReply(context, new JsonObject().put("Error", "Missing Service"));
+                }
+                requestTimer.observeDuration();
+            }
+        }).start();
     }
 
     protected void processServiceUserQuery(RoutingContext context) {
-        Optional<WebClient> client = serviceLookup.getUserClient();
-        if (client.isPresent()) {
-            client.get().get(USER_QUERY_PATH)
-                    .sendJson(context.body().asJsonObject(), ar -> {
-                        if (ar.succeeded()) {
-                            sendReply(context, ar.result().bodyAsJsonObject());
-                        } else {
-                            LOGGER.severe(ar.cause().getMessage());
-                        }
-                    });
-        } else {
-            System.out.println("EBikeCesena Api Gateway client not found");
-        }
+        requests_counter.inc();
+        new Thread(() -> {
+            try (Timer requestTimer = request_duration_histogram.startTimer()) {
+                Optional<WebClient> client = serviceLookup.getUserClient();
+                if (client.isPresent()) {
+                    client.get().get(USER_QUERY_PATH)
+                            .sendJson(context.body().asJsonObject(), ar -> {
+                                if (ar.succeeded()) {
+                                    sendReply(context, ar.result().bodyAsJsonObject());
+                                } else {
+                                    LOGGER.severe(ar.cause().getMessage());
+                                    sendReply(context, ar.result().bodyAsJsonObject().put("failure", ar.cause().getMessage()));
+                                }
+                            });
+                } else {
+                    System.out.println("EBikeCesena Api Gateway user service not connected");
+                    sendReply(context, new JsonObject().put("Error", "Missing Service"));
+                }
+                requestTimer.observeDuration();
+            }
+        }).start();
     }
 
     protected void healthCheckHandler(RoutingContext context) {

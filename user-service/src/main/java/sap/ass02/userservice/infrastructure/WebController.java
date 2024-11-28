@@ -2,6 +2,11 @@ package sap.ass02.userservice.infrastructure;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.config.MemberAttributeConfig;
+import io.prometheus.metrics.core.datapoints.Timer;
+import io.prometheus.metrics.core.metrics.Counter;
+import io.prometheus.metrics.core.metrics.Gauge;
+import io.prometheus.metrics.core.metrics.Histogram;
+import io.prometheus.metrics.exporter.httpserver.HTTPServer;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
@@ -21,6 +26,7 @@ import sap.ass02.userservice.domain.ports.AppManager;
 import sap.ass02.userservice.domain.ports.ResourceNotification;
 import sap.ass02.userservice.utils.WebOperation;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -38,6 +44,10 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
     private static final String HEALTH_CHECK_PATH = "/healthCheck";
 
+    private final Gauge users_logged_gauge;
+    private final Histogram http_request_duration_histogram;
+    private final Counter requests_counter;
+
     /**
      * The Vertx.
      */
@@ -49,6 +59,30 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
      */
     public WebController(AppManager appManager) {
         this.port = 8081;
+
+        users_logged_gauge = Gauge.builder()
+                .name("users_logged_gauge")
+                .help("number of users logged in in the app")
+                .register();
+
+        http_request_duration_histogram = Histogram.builder()
+                .name("http_request_duration_seconds")
+                .help("Histogram of http request durations in seconds")
+                .register();
+
+        requests_counter = Counter.builder()
+                .name("request_counter")
+                .help("counter of incoming request")
+                .register();
+
+        try {
+            HTTPServer.builder()
+                    .port(this.port+100)
+                    .buildAndStart();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
         LOGGER.setLevel(Level.FINE);
         this.pManager = appManager;
         Config hazelcastConfig = new Config();
@@ -107,53 +141,58 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
      * @param context the RoutingContext
      */
     protected void processServiceUserCmd(RoutingContext context) {
+        requests_counter.inc();
         if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.log(Level.INFO, "New request - user cmd " + context.currentRoute().getPath());
         }
         new Thread(() -> {
-            JsonObject requestBody = context.body().asJsonObject();
-            if (requestBody != null && requestBody.containsKey(OPERATION)) {
-                WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];
-                boolean b = false;
-                switch (op) {
-                    case CREATE:  {
-                        if (requestBody.containsKey(USERNAME) && requestBody.containsKey(PASSWORD)) {
-                            String username = requestBody.getString(USERNAME);
-                            String password = requestBody.getString(PASSWORD);
-                            b = pManager.createUser(username, password);
-                        } else {
-                            invalidJSONReply(context,requestBody);
+            try (Timer requestTimer = http_request_duration_histogram.startTimer()) {
+                JsonObject requestBody = context.body().asJsonObject();
+                if (requestBody != null && requestBody.containsKey(OPERATION)) {
+                    WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];
+                    boolean b = false;
+                    switch (op) {
+                        case CREATE: {
+                            if (requestBody.containsKey(USERNAME) && requestBody.containsKey(PASSWORD)) {
+                                String username = requestBody.getString(USERNAME);
+                                String password = requestBody.getString(PASSWORD);
+                                b = pManager.createUser(username, password);
+                            } else {
+                                invalidJSONReply(context, requestBody);
+                            }
+                            break;
                         }
-                        break;
-                    }
-                    case UPDATE:  {
-                        if (requestBody.containsKey(USER_ID) && requestBody.containsKey(CREDIT)) {
-                            int id = requestBody.getInteger(USER_ID);
-                            int credit = requestBody.getInteger(CREDIT);
-                            b = pManager.updateUser(id,credit);
-                        } else if (requestBody.containsKey(USER_ID) && requestBody.containsKey(ADMIN)) {
-                            int id = requestBody.getInteger(USER_ID);
-                            boolean admin = requestBody.getInteger(ADMIN) > 0;
-                            b = pManager.updateUserRole(id, admin);
-                        } else {
-                            invalidJSONReply(context,requestBody);
+                        case UPDATE: {
+                            if (requestBody.containsKey(USER_ID) && requestBody.containsKey(CREDIT)) {
+                                int id = requestBody.getInteger(USER_ID);
+                                int credit = requestBody.getInteger(CREDIT);
+                                b = pManager.updateUser(id, credit);
+                            } else if (requestBody.containsKey(USER_ID) && requestBody.containsKey(ADMIN)) {
+                                int id = requestBody.getInteger(USER_ID);
+                                boolean admin = requestBody.getInteger(ADMIN) > 0;
+                                b = pManager.updateUserRole(id, admin);
+                            } else {
+                                invalidJSONReply(context, requestBody);
+                            }
+                            break;
                         }
-                        break;
-                    }
-                    case DELETE:  {
-                        if (requestBody.containsKey(USER_ID)) {
-                            int id = requestBody.getInteger(USER_ID);
-                            b = pManager.deleteUser(id);
-                        } else {
-                            invalidJSONReply(context,requestBody);
+                        case DELETE: {
+                            if (requestBody.containsKey(USER_ID)) {
+                                int id = requestBody.getInteger(USER_ID);
+                                b = pManager.deleteUser(id);
+                            } else {
+                                invalidJSONReply(context, requestBody);
+                            }
+                            break;
                         }
-                        break;
+                        default:
+                            invalidJSONReply(context, requestBody);
                     }
-                    default: invalidJSONReply(context,requestBody);
+                    checkResponseAndSendReply(context, b);
+                } else {
+                    invalidJSONReply(context, requestBody);
                 }
-                checkResponseAndSendReply(context, b);
-            } else {
-                invalidJSONReply(context,requestBody);
+                requestTimer.observeDuration();
             }
         }).start();
     }
@@ -165,40 +204,43 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
      * @param context the RoutingContext
      */
     protected void processServiceUserQuery(RoutingContext context) {
+        requests_counter.inc();
         if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.log(Level.INFO, "New request - user query " + context.currentRoute().getPath());
         }
         new Thread(() -> {
-            // Parse the JSON body
-            JsonObject requestBody = context.body().asJsonObject();
-            if (requestBody != null && requestBody.containsKey(OPERATION)) {
-                WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];
-                boolean b;
-                User u;
-                List<User> users;
-                if (op == WebOperation.LOGIN) {
-                    if (requestBody.containsKey(USERNAME) && requestBody.containsKey(PASSWORD)) {
-                        String username = requestBody.getString(USERNAME);
-                        String password = requestBody.getString(PASSWORD);
-                        b = pManager.login(username, password);
-                        checkResponseAndSendReply(context, b);
-                    } else {
-                        invalidJSONReply(context,requestBody);
-                    }
-                } else if(op == WebOperation.READ) {
+            try (Timer requestTimer = http_request_duration_histogram.startTimer()) {
+                // Parse the JSON body
+                JsonObject requestBody = context.body().asJsonObject();
+                if (requestBody != null && requestBody.containsKey(OPERATION)) {
+                    WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];
+                    boolean b;
+                    User u;
+                    List<User> users;
+                    if (op == WebOperation.LOGIN) {
+                        if (requestBody.containsKey(USERNAME) && requestBody.containsKey(PASSWORD)) {
+                            String username = requestBody.getString(USERNAME);
+                            String password = requestBody.getString(PASSWORD);
+                            b = pManager.login(username, password);
+                            if (b) { users_logged_gauge.inc(); }
+                            checkResponseAndSendReply(context, b);
+                        } else {
+                            invalidJSONReply(context, requestBody);
+                        }
+                    } else if (op == WebOperation.READ) {
                         if (requestBody.containsKey(USER_ID) || requestBody.containsKey(USERNAME)) {
                             int id = requestBody.containsKey(USER_ID) ? requestBody.getInteger(USER_ID) : 0;
                             String username = requestBody.containsKey(USERNAME) ? requestBody.getString(USERNAME) : "";
-                            u = pManager.getUser(id,username);
+                            u = pManager.getUser(id, username);
                             var map = new HashMap<String, Object>();
                             map.put(USER_ID, u.id());
                             map.put(USERNAME, u.userName());
                             map.put(CREDIT, u.credit());
                             map.put("admin", u.admin());
-                            composeJSONAndSendReply(context,map);
+                            composeJSONAndSendReply(context, map);
                         } else {
                             users = pManager.getAllUsers();
-                            var array = new ArrayList<Map<String,Object>>();
+                            var array = new ArrayList<Map<String, Object>>();
                             for (User user : users) {
                                 var map = new HashMap<String, Object>();
                                 map.put(USER_ID, user.id());
@@ -207,11 +249,13 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
                                 map.put("admin", user.admin());
                                 array.add(map);
                             }
-                            composeJSONArrayAndSendReply(context,array);
+                            composeJSONArrayAndSendReply(context, array);
                         }
+                    }
+                } else {
+                    invalidJSONReply(context, requestBody);
                 }
-            } else {
-                invalidJSONReply(context,requestBody);
+                requestTimer.observeDuration();
             }
         }).start();
     }

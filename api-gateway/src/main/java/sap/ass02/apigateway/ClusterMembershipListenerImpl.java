@@ -2,20 +2,24 @@ package sap.ass02.apigateway;
 
 import com.hazelcast.cluster.Member;
 import com.hazelcast.cluster.MembershipEvent;
+import io.prometheus.metrics.core.metrics.Gauge;
 
 import java.util.Set;
 
 public class ClusterMembershipListenerImpl implements ClusterMembershipListener {
 
     private final ServiceLookup serviceLookup;
+    private final Gauge membersGauge;
 
-    public ClusterMembershipListenerImpl(ServiceLookup serviceLookup) {
+    public ClusterMembershipListenerImpl(ServiceLookup serviceLookup, Gauge membersGauge) {
         super();
         this.serviceLookup = serviceLookup;
+        this.membersGauge = membersGauge;
     }
 
     @Override
     public void memberAdded(MembershipEvent membershipEvent) {
+        this.membersGauge.inc();
         Set<Member> members = membershipEvent.getMembers();
         for (Member member : members) {
             String serviceName = member.getAttribute("SERVICE_NAME");
@@ -45,6 +49,7 @@ public class ClusterMembershipListenerImpl implements ClusterMembershipListener 
 
     @Override
     public void memberRemoved(MembershipEvent membershipEvent) {
+        this.membersGauge.dec();
         Set<Member> members = membershipEvent.getMembers();
         for (Member member : members) {
             String serviceName = member.getAttribute("SERVICE_NAME");

@@ -4,6 +4,9 @@ import com.hazelcast.config.Config;
 import com.hazelcast.config.MemberAttributeConfig;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
+import io.prometheus.metrics.core.metrics.Counter;
+import io.prometheus.metrics.core.metrics.Gauge;
+import io.prometheus.metrics.exporter.httpserver.HTTPServer;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
@@ -19,6 +22,7 @@ import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
 
+import java.io.IOException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -43,6 +47,9 @@ public class WebController extends AbstractVerticle implements ConfigurationShar
     private IMap<String, String> distributedMap;
     private final Map<String, String> configurationMap = new ConcurrentHashMap<>();
 
+    private final Gauge configurations_registered_gauge;
+    private final Counter configurations_requested_counter;
+
     /**
      * The Vertx.
      */
@@ -53,6 +60,25 @@ public class WebController extends AbstractVerticle implements ConfigurationShar
      */
     public WebController(ConfigurationFilesObserver cfo ) {
         this.port = 8090;
+
+        configurations_registered_gauge = Gauge.builder()
+                .name("configurations_registered_counter")
+                .help("number of configurations registered")
+                .register();
+
+        configurations_requested_counter = Counter.builder()
+                .name("configurations_requested_counter")
+                .help("number of configuration request received")
+                .register();
+
+        try {
+            HTTPServer.builder()
+                    .port(this.port+100)
+                    .buildAndStart();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
         LOGGER.setLevel(Level.FINE);
         Config hazelcastConfig = new Config();
         hazelcastConfig.setClusterName("EBikeCesena");
@@ -106,6 +132,7 @@ public class WebController extends AbstractVerticle implements ConfigurationShar
      * @param context the RoutingContext
      */
     protected void processServiceConfigurationQuery(RoutingContext context) {
+        configurations_requested_counter.inc();
         if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.log(Level.INFO, "New request - configuration get " + context.currentRoute().getPath());
         }
@@ -141,8 +168,12 @@ public class WebController extends AbstractVerticle implements ConfigurationShar
 
     @Override
     public void addConfiguration(String configurationName, String configurationFile) {
+        String confName = configurationName.split("\\.")[0];
+        if(!configurationMap.containsKey(confName)) {
+            configurations_registered_gauge.inc();
+        }
         distributedMap.put(configurationName, new Date().toString());
-        configurationMap.put(configurationName.split("\\.")[0], configurationFile);
+        configurationMap.put(confName, configurationFile);
         System.out.println("Added configuration: " + configurationName);
     }
 

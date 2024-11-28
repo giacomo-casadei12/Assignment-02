@@ -1,4 +1,4 @@
-package sap.ass02.vertxrideservice;
+package sap.ass02.vertxrideservice.infrastructure;
 
 import com.hazelcast.cluster.MembershipEvent;
 import com.hazelcast.cluster.MembershipListener;

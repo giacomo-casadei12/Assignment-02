@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 10s
+scrape_configs:
+ - job_name: api-gateway
+   static_configs:
+    - targets:
+       - api-gateway:8185
+ - job_name: ride-service
+   static_configs:
+     - targets:
+         - ride-service:8180
+ - job_name: user-service
+   static_configs:
+     - targets:
+         - user-service:8181
+ - job_name: bike-service
+   static_configs:
+     - targets:
+         - bike-service:8182
+ - job_name: configuration-server
+   static_configs:
+     - targets:
+         - configuration-server:8190

@@ -2,6 +2,11 @@ package sap.ass02.bikeservice.infrastructure;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.config.MemberAttributeConfig;
+import io.prometheus.metrics.core.datapoints.Timer;
+import io.prometheus.metrics.core.metrics.Counter;
+import io.prometheus.metrics.core.metrics.Gauge;
+import io.prometheus.metrics.core.metrics.Histogram;
+import io.prometheus.metrics.exporter.httpserver.HTTPServer;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
@@ -21,6 +26,7 @@ import sap.ass02.bikeservice.domain.ports.AppManager;
 import sap.ass02.bikeservice.utils.EBikeState;
 import sap.ass02.bikeservice.utils.WebOperation;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -38,6 +44,10 @@ public class WebController extends AbstractVerticle {
     private static final Logger LOGGER = Logger.getLogger("[EBikeCesena]");
     private static final String HEALTH_CHECK_PATH = "/healthCheck";
 
+    private final Gauge bikes_registered_gauge;
+    private final Counter requests_counter;
+    private final Histogram http_request_duration_histogram;
+
     /**
      * The Vertx.
      */
@@ -49,6 +59,30 @@ public class WebController extends AbstractVerticle {
      */
     public WebController(AppManager appManager) {
         this.port = 8082;
+
+        bikes_registered_gauge = Gauge.builder()
+                .name("bikes_registered_gauge")
+                .help("number of bikes registered in the app")
+                .register();
+
+        http_request_duration_histogram = Histogram.builder()
+                .name("http_request_duration_seconds")
+                .help("Histogram of http request durations in seconds")
+                .register();
+
+        requests_counter = Counter.builder()
+                .name("request_counter")
+                .help("counter of incoming request")
+                .register();
+
+        try {
+            HTTPServer.builder()
+                    .port(this.port+100)
+                    .buildAndStart();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
         LOGGER.setLevel(Level.FINE);
         this.pManager = appManager;
         Config hazelcastConfig = new Config();
@@ -106,6 +140,7 @@ public class WebController extends AbstractVerticle {
             }
         });
 
+        bikes_registered_gauge.inc(pManager.getAllEBikes(0,0,false).size());
     }
 
     /**
@@ -115,61 +150,72 @@ public class WebController extends AbstractVerticle {
      * @param context the RoutingContext
      */
     protected void processServiceEBikeCmd(RoutingContext context) {
+        requests_counter.inc();
         if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.log(Level.INFO, "New request - ebike cmd " + context.currentRoute().getPath());
         }
         new Thread(() -> {
-            // Parse the JSON body
-            JsonObject requestBody = context.body().asJsonObject();
-            if (requestBody != null && requestBody.containsKey(OPERATION)) {
-                WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];
-                boolean b = false;
-                switch (op) {
-                    case CREATE:  {
-                        if (requestBody.containsKey(POSITION_X) && requestBody.containsKey(POSITION_Y)) {
-                            int x = requestBody.getInteger(POSITION_X);
-                            int y = requestBody.getInteger(POSITION_Y);
-                            b = pManager.createEBike(x, y);
-                        } else {
-                            invalidJSONReply(context,requestBody);
-                        }
-                        break;
-                    }
-                    case UPDATE:  {
-                        if (requestBody.containsKey(E_BIKE_ID) && requestBody.containsKey(POSITION_Y) && requestBody.containsKey(POSITION_Y) && !requestBody.containsKey(BATTERY)) {
-                            int id = requestBody.getInteger(E_BIKE_ID);
-                            int x = requestBody.getInteger(POSITION_X);
-                            int y = requestBody.getInteger(POSITION_Y);
-                            b = pManager.updateEbikePosition(id,x,y);
-                        } else if (requestBody.containsKey(E_BIKE_ID) && requestBody.containsKey(BATTERY) && requestBody.containsKey(STATE)) {
-                            int id = requestBody.getInteger(E_BIKE_ID);
-                            int battery = requestBody.getInteger(BATTERY);
-                            EBikeState state = EBikeState.valueOf(requestBody.getString(STATE));
-                            int x = requestBody.getInteger(POSITION_X);
-                            int y = requestBody.getInteger(POSITION_Y);
-                            b = pManager.updateEBike(id,battery,state, x, y);
-                            if (b) {
-                                notifyEBikeChanged(id, x, y, battery, state.toString());
+            try (Timer requestTimer = http_request_duration_histogram.startTimer()) {
+                // Parse the JSON body
+                JsonObject requestBody = context.body().asJsonObject();
+                if (requestBody != null && requestBody.containsKey(OPERATION)) {
+                    WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];
+                    boolean b = false;
+                    switch (op) {
+                        case CREATE: {
+                            if (requestBody.containsKey(POSITION_X) && requestBody.containsKey(POSITION_Y)) {
+                                int x = requestBody.getInteger(POSITION_X);
+                                int y = requestBody.getInteger(POSITION_Y);
+                                b = pManager.createEBike(x, y);
+                            } else {
+                                invalidJSONReply(context, requestBody);
                             }
-                        } else {
-                            invalidJSONReply(context,requestBody);
+                            break;
                         }
-                        break;
-                    }
-                    case DELETE:  {
-                        if (requestBody.containsKey(E_BIKE_ID)) {
-                            int id = requestBody.getInteger(E_BIKE_ID);
-                            b = pManager.deleteEBike(id);
-                        } else {
-                            invalidJSONReply(context,requestBody);
+                        case UPDATE: {
+                            if (requestBody.containsKey(E_BIKE_ID) && requestBody.containsKey(POSITION_Y) && requestBody.containsKey(POSITION_Y) && !requestBody.containsKey(BATTERY)) {
+                                int id = requestBody.getInteger(E_BIKE_ID);
+                                int x = requestBody.getInteger(POSITION_X);
+                                int y = requestBody.getInteger(POSITION_Y);
+                                b = pManager.updateEbikePosition(id, x, y);
+                                if (b) {
+                                    bikes_registered_gauge.inc();
+                                }
+                            } else if (requestBody.containsKey(E_BIKE_ID) && requestBody.containsKey(BATTERY) && requestBody.containsKey(STATE)) {
+                                int id = requestBody.getInteger(E_BIKE_ID);
+                                int battery = requestBody.getInteger(BATTERY);
+                                EBikeState state = EBikeState.valueOf(requestBody.getString(STATE));
+                                int x = requestBody.getInteger(POSITION_X);
+                                int y = requestBody.getInteger(POSITION_Y);
+                                b = pManager.updateEBike(id, battery, state, x, y);
+                                if (b) {
+                                    notifyEBikeChanged(id, x, y, battery, state.toString());
+                                }
+                            } else {
+                                invalidJSONReply(context, requestBody);
+                            }
+                            break;
                         }
-                        break;
+                        case DELETE: {
+                            if (requestBody.containsKey(E_BIKE_ID)) {
+                                int id = requestBody.getInteger(E_BIKE_ID);
+                                b = pManager.deleteEBike(id);
+                                if (b) {
+                                    bikes_registered_gauge.dec();
+                                }
+                            } else {
+                                invalidJSONReply(context, requestBody);
+                            }
+                            break;
+                        }
+                        default:
+                            invalidJSONReply(context, requestBody);
                     }
-                    default: invalidJSONReply(context,requestBody);
+                    checkResponseAndSendReply(context, b);
+                } else {
+                    invalidJSONReply(context, requestBody);
                 }
-                checkResponseAndSendReply(context, b);
-            } else {
-                invalidJSONReply(context,requestBody);
+                requestTimer.observeDuration();
             }
         }).start();
     }
@@ -181,45 +227,49 @@ public class WebController extends AbstractVerticle {
      * @param context the RoutingContext
      */
     protected void processServiceEBikeQuery(RoutingContext context) {
+        requests_counter.inc();
         if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.log(Level.INFO, "New request - ebike query " + context.currentRoute().getPath());
         }
         new Thread(() -> {
-            // Parse the JSON body
-            JsonObject requestBody = context.body().asJsonObject();
-            if (requestBody != null && requestBody.containsKey(OPERATION)) {
-                WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];
-                EBike eb;
-                List<EBike> bikes;
-                if (Objects.requireNonNull(op) == WebOperation.READ) {
-                    if (requestBody.containsKey(E_BIKE_ID)) {
-                        int id = requestBody.getInteger(E_BIKE_ID);
-                        eb = pManager.getEBike(id);
-                        var map = buildEBikeMap(eb);
-                        composeJSONAndSendReply(context,map);
-                    } else {
-                        if (requestBody.containsKey(POSITION_X) || requestBody.containsKey(POSITION_Y)) {
-                            int x = requestBody.containsKey(POSITION_X) ? requestBody.getInteger(POSITION_X) : 0;
-                            int y = requestBody.containsKey(POSITION_Y) ? requestBody.getInteger(POSITION_Y) : 0;
-                            bikes = pManager.getAllEBikes(x,y,false);
-                        } else if (requestBody.containsKey("available")) {
-                            boolean avail = requestBody.getBoolean("available");
-                            bikes = pManager.getAllEBikes(0,0,avail);
+            try (Timer requestTimer = http_request_duration_histogram.startTimer()) {
+                // Parse the JSON body
+                JsonObject requestBody = context.body().asJsonObject();
+                if (requestBody != null && requestBody.containsKey(OPERATION)) {
+                    WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];
+                    EBike eb;
+                    List<EBike> bikes;
+                    if (Objects.requireNonNull(op) == WebOperation.READ) {
+                        if (requestBody.containsKey(E_BIKE_ID)) {
+                            int id = requestBody.getInteger(E_BIKE_ID);
+                            eb = pManager.getEBike(id);
+                            var map = buildEBikeMap(eb);
+                            composeJSONAndSendReply(context, map);
                         } else {
-                            bikes = pManager.getAllEBikes(0,0,false);
+                            if (requestBody.containsKey(POSITION_X) || requestBody.containsKey(POSITION_Y)) {
+                                int x = requestBody.containsKey(POSITION_X) ? requestBody.getInteger(POSITION_X) : 0;
+                                int y = requestBody.containsKey(POSITION_Y) ? requestBody.getInteger(POSITION_Y) : 0;
+                                bikes = pManager.getAllEBikes(x, y, false);
+                            } else if (requestBody.containsKey("available")) {
+                                boolean avail = requestBody.getBoolean("available");
+                                bikes = pManager.getAllEBikes(0, 0, avail);
+                            } else {
+                                bikes = pManager.getAllEBikes(0, 0, false);
+                            }
+                            var array = new ArrayList<Map<String, Object>>();
+                            for (EBike eBike : bikes) {
+                                var map = buildEBikeMap(eBike);
+                                array.add(map);
+                            }
+                            composeJSONArrayAndSendReply(context, array);
                         }
-                        var array = new ArrayList<Map<String,Object>>();
-                        for (EBike eBike : bikes) {
-                            var map = buildEBikeMap(eBike);
-                            array.add(map);
-                        }
-                        composeJSONArrayAndSendReply(context,array);
+                    } else {
+                        invalidJSONReply(context, requestBody);
                     }
                 } else {
-                    invalidJSONReply(context,requestBody);
+                    invalidJSONReply(context, requestBody);
                 }
-            } else {
-                invalidJSONReply(context,requestBody);
+                requestTimer.observeDuration();
             }
         }).start();
     }
