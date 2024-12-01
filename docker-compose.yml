@@ -63,12 +63,14 @@ services:
     networks:
       - ebike-network
     ports:
-      - "5701:5701"
+      - "5702:5701"
       - "8085:8085"
       - "8185:8185"
     expose: 
       - 8085
       - 8185
+    environment:
+      HAZELCAST_MEMBER_IP: "192.168.1.79"
     healthcheck:
       test: curl --fail http://api-gateway:8085/healthCheck || exit 1
       interval: 1m30s

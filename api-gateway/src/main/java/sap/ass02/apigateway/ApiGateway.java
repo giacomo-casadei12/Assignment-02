@@ -91,8 +91,9 @@ public class ApiGateway extends AbstractVerticle {
         hazelcastConfig.setMemberAttributeConfig(new MemberAttributeConfig().setAttributes(attributes));
         hazelcastConfig.addListenerConfig(new ListenerConfig(new ClusterMembershipListenerImpl(this.serviceLookup, service_connected)));
 
+        String hazelcastMemberIp = System.getenv("HAZELCAST_MEMBER_IP");
         hazelcastConfig.getNetworkConfig().setPort(5701).getJoin().getTcpIpConfig().setEnabled(true)
-                .addMember("192.168.1.79:5701")
+                .addMember(hazelcastMemberIp +":5701")
                 .addMember("api-gateway:5701");
 
         HazelcastClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);

@@ -173,7 +173,7 @@ public class WebController extends AbstractVerticle {
                             break;
                         }
                         case UPDATE: {
-                            if (requestBody.containsKey(E_BIKE_ID) && requestBody.containsKey(POSITION_Y) && requestBody.containsKey(POSITION_Y) && !requestBody.containsKey(BATTERY)) {
+                            if (requestBody.containsKey(E_BIKE_ID) && requestBody.containsKey(POSITION_X) && requestBody.containsKey(POSITION_Y) && !requestBody.containsKey(BATTERY)) {
                                 int id = requestBody.getInteger(E_BIKE_ID);
                                 int x = requestBody.getInteger(POSITION_X);
                                 int y = requestBody.getInteger(POSITION_Y);

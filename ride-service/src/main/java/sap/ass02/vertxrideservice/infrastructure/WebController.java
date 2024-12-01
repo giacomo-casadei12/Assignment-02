@@ -46,8 +46,8 @@ public class WebController extends AbstractVerticle {
     private final Map<Integer, RoutingContext> routingContexts = new ConcurrentHashMap<>();
     private final Map<Integer, Timer> timers = new ConcurrentHashMap<>();
 
-    private final Histogram http_request_duration_histogram;
-    private final Counter requests_counter;
+    private Histogram http_request_duration_histogram;
+    private Counter requests_counter;
 
     private int requestCounter = 1;
     /**
@@ -66,15 +66,6 @@ public class WebController extends AbstractVerticle {
         LOGGER.setLevel(Level.FINE);
         this.serviceLookup = serviceLookup;
 
-        http_request_duration_histogram = Histogram.builder()
-                .name("http_request_duration_seconds")
-                .help("Histogram of http request durations in seconds")
-                .register();
-
-        requests_counter = Counter.builder()
-                .name("request_counter")
-                .help("counter of incoming request")
-                .register();
     }
 
     public void attachClusterManager(HazelcastClusterManager clusterManager) {
@@ -83,14 +74,6 @@ public class WebController extends AbstractVerticle {
 
     @Override
     public void start() {
-
-        try {
-            HTTPServer.builder()
-                    .port(this.port+100)
-                    .buildAndStart();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
 
         LOGGER.log(Level.INFO, "Web server initializing...");
         this.vertx = VertxSingleton.getInstance().getVertx();
@@ -110,12 +93,34 @@ public class WebController extends AbstractVerticle {
             LOGGER.log(Level.INFO, "EBikeCesena RideService web server ready on port: " + port);
         }
 
-        HazelcastInstance hz = clusterManager.getHazelcastInstance();
+        try {
+            HazelcastInstance hz = clusterManager.getHazelcastInstance();
+
+            if (!Objects.isNull(hz)) {
+                IMap<String, String> map = hz.getMap("configurations");
+                map.addEntryListener(new ClusterEntryListener(this.eventBus), true);
+                http_request_duration_histogram = Histogram.builder()
+                        .name("http_request_duration_seconds")
+                        .help("Histogram of http request durations in seconds")
+                        .register();
+
+                requests_counter = Counter.builder()
+                        .name("request_counter")
+                        .help("counter of incoming request")
+                        .register();
+                try {
+                    HTTPServer.builder()
+                            .port(this.port+100)
+                            .buildAndStart();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+        }
 
         this.eventBus = vertx.eventBus();
-
-        IMap<String, String> map = hz.getMap("configurations");
-        map.addEntryListener(new ClusterEntryListener(this.eventBus), true);
 
         eventBus.consumer("RideWebControllerSendResponse", msg -> {
             JsonObject json = new JsonObject(msg.body().toString());
@@ -163,6 +168,7 @@ public class WebController extends AbstractVerticle {
         eventBus.consumer("RideWebControllerConfigurationsChanged", _ -> this.getConfiguration());
 
         this.getConfiguration();
+
     }
 
     private void getConfiguration() {
@@ -197,15 +203,19 @@ public class WebController extends AbstractVerticle {
      * @param context the RoutingContext
      */
     protected void processServiceRideCmd(RoutingContext context) {
-        requests_counter.inc();
+        if (!Objects.isNull(this.requests_counter)) {
+            requests_counter.inc();
+        }
         if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.log(Level.INFO, "New request - ride cmd " + context.currentRoute().getPath());
         }
         int requestId = requestCounter;
         requestCounter++;
         this.routingContexts.put(requestId, context);
-        Timer timer = http_request_duration_histogram.startTimer();
-        timers.put(requestId, timer);
+        if (!Objects.isNull(http_request_duration_histogram)) {
+            Timer timer = http_request_duration_histogram.startTimer();
+            timers.put(requestId, timer);
+        }
         JsonObject requestBody = context.body().asJsonObject();
         if (requestBody != null && requestBody.containsKey(OPERATION)) {
             WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];
@@ -278,16 +288,19 @@ public class WebController extends AbstractVerticle {
      * @param context the RoutingContext
      */
     protected void processServiceRideQuery(RoutingContext context) {
-        requests_counter.inc();
+        if (!Objects.isNull(this.requests_counter)) {
+            requests_counter.inc();
+        }
         if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.log(Level.INFO, "New request - ride query " + context.currentRoute().getPath());
         }
         int requestId = requestCounter;
         requestCounter++;
         this.routingContexts.put(requestId, context);
-        Timer timer = http_request_duration_histogram.startTimer();
-        timers.put(requestId, timer);
-        // Parse the JSON body
+        if (!Objects.isNull(http_request_duration_histogram)) {
+            Timer timer = http_request_duration_histogram.startTimer();
+            timers.put(requestId, timer);
+        }
         JsonObject requestBody = context.body().asJsonObject();
         if (requestBody != null && requestBody.containsKey(OPERATION)) {
             WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];
