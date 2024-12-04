@@ -1,5 +1,7 @@
 package sap.ass02.configurationserver.infrastructure;
 
+import sap.ass02.configurationserver.domain.ConfigurationFilesObserver;
+
 /**
  * Main class for EBikeCesena server.
  */

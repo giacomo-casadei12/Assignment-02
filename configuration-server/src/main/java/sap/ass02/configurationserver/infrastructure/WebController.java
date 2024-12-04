@@ -21,6 +21,8 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
+import sap.ass02.configurationserver.domain.ConfigurationFilesObserver;
+import sap.ass02.configurationserver.domain.ConfigurationSharer;
 
 import java.io.IOException;
 import java.util.Date;

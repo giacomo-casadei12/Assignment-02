@@ -1,4 +1,4 @@
-package sap.ass02.configurationserver.infrastructure;
+package sap.ass02.configurationserver.domain;
 
 import java.io.IOException;
 import java.nio.file.*;
