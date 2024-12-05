@@ -15,6 +15,8 @@ import sap.ass02.gui.utils.Pair;
 import sap.ass02.gui.utils.Triple;
 import sap.ass02.gui.utils.WebOperation;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,7 +46,10 @@ public class WebClientImpl implements WebClient {
         Config hazelcastConfig = new Config();
         hazelcastConfig.setClusterName("EBikeCesena");
 
-        hazelcastConfig.getNetworkConfig().setPort(5701).getJoin().getTcpIpConfig().setEnabled(true).addMember("192.168.1.79:5701");
+        try {
+            hazelcastConfig.getNetworkConfig().setPort(5701).getJoin().getTcpIpConfig().setEnabled(true).addMember(InetAddress.getLocalHost().getHostAddress() + ":5701");
+        } catch (UnknownHostException ignored) {
+        }
 
         ClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
         Map<String, String> attributes = new HashMap<>();

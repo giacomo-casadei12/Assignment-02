@@ -14,12 +14,17 @@ services:
     expose:
       - 8080
       - 8180
+    environment:
+      DB_USER: "root"
+      DB_PASSWORD: "d3fR3@dy!"
+      DB_URL: "jdbc:mysql://host.docker.internal:3307/ebcesena2rides"
     healthcheck:
       test: curl --fail http://ride-service:8080/healthCheck || exit 1
       interval: 1m30s
       timeout: 10s
       retries: 3
       start_period: 30s
+    restart: always
   user-service:
     image: user-service
     depends_on:
@@ -33,12 +38,17 @@ services:
     expose: 
       - 8081
       - 8181
+    environment:
+      DB_USER: "root"
+      DB_PASSWORD: "d3fR3@dy!"
+      DB_URL: "jdbc:mysql://host.docker.internal:3307/ebcesena2"
     healthcheck:
       test: curl --fail http://user-service:8081/healthCheck || exit 1
       interval: 1m30s
       timeout: 10s
       retries: 3
       start_period: 30s
+    restart: always
   bike-service:
     image: bike-service
     depends_on:
@@ -52,12 +62,17 @@ services:
     expose:
       - 8082
       - 8182
+    environment:
+      DB_USER: "root"
+      DB_PASSWORD: "d3fR3@dy!"
+      DB_URL: "jdbc:mysql://host.docker.internal:3307/ebcesena2bikes"
     healthcheck:
       test: curl --fail http://bike-service:8082/healthCheck || exit 1
       interval: 1m30s
       timeout: 10s
       retries: 3
       start_period: 30s
+    restart: always
   api-gateway:
     image: api-gateway
     networks:
@@ -77,6 +92,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    restart: always
   configuration-server:
     image: configuration-server
     depends_on:
@@ -97,6 +113,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    restart: always
   prometheus:
     image: prom/prometheus
     volumes:

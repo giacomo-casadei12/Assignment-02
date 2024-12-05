@@ -41,7 +41,6 @@ public class Main {
         hazelcastConfig.getNetworkConfig().setPort(5701).getJoin().getTcpIpConfig().setEnabled(true).addMember("api-gateway:5701");
         HazelcastClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
-        // Create VertxOptions with the Hazelcast Cluster Manager
         VertxOptions options = new VertxOptions().setClusterManager(clusterManager);
 
         Vertx.clusteredVertx(options, cluster -> {

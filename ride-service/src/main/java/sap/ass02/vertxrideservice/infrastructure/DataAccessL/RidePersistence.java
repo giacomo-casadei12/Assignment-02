@@ -36,9 +36,9 @@ public class RidePersistence extends AbstractVerticle {
      */
     public RidePersistence() {
         ds = new MysqlDataSource();
-        ds.setUser("root");
-        ds.setPassword("d3fR3@dy!");
-        ds.setURL("jdbc:mysql://host.docker.internal:3307/ebcesena2rides");
+        ds.setUser(System.getenv("DB_USER"));
+        ds.setPassword(System.getenv("DB_PASSWORD"));
+        ds.setURL(System.getenv("DB_URL"));
         format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss") ;
     }
 

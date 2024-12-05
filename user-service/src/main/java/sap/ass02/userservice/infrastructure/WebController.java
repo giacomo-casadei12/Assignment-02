@@ -95,7 +95,6 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
         hazelcastConfig.getNetworkConfig().setPort(5701).getJoin().getTcpIpConfig().setEnabled(true).addMember("api-gateway:5701");
         ClusterManager clusterManager = new HazelcastClusterManager(hazelcastConfig);
 
-        // Create VertxOptions with the Hazelcast Cluster Manager
         VertxOptions options = new VertxOptions().setClusterManager(clusterManager);
 
         Vertx.clusteredVertx(options, cluster -> {
@@ -210,7 +209,6 @@ public class WebController extends AbstractVerticle implements ResourceNotificat
         }
         new Thread(() -> {
             try (Timer requestTimer = http_request_duration_histogram.startTimer()) {
-                // Parse the JSON body
                 JsonObject requestBody = context.body().asJsonObject();
                 if (requestBody != null && requestBody.containsKey(OPERATION)) {
                     WebOperation op = WebOperation.values()[requestBody.getInteger(OPERATION)];

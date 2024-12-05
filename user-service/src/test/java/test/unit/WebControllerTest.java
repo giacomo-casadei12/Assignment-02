@@ -5,7 +5,6 @@ import io.restassured.http.ContentType;
 import io.vertx.core.json.JsonObject;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.jupiter.api.BeforeAll;
 import sap.ass02.userservice.domain.ports.AppManager;
 import sap.ass02.userservice.infrastructure.WebController;
 import sap.ass02.userservice.utils.WebOperation;
@@ -23,7 +22,6 @@ public class WebControllerTest {
 
     @BeforeClass
     public static void setup() throws InterruptedException {
-        // Set up RestAssured base URI
         RestAssured.baseURI = "http://127.0.0.1:8081/api";
         RestAssured.config = RestAssured.config()
                 .httpClient(HttpClientConfig.httpClientConfig()
